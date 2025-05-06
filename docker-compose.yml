@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app/models/saved_models:/app/app/models/saved_models
+    environment:
+      - PYTHONPATH=/app
+      - DEBUG=0
+    restart: unless-stopped
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Uncomment to add a development frontend service
+  # frontend:
+  #   image: node:18-alpine
+  #   working_dir: /app
+  #   volumes:
+  #     - ./app/frontend:/app
+  #   ports:
+  #     - "3000:3000"
+  #   command: ["npm", "start"]
+  #   environment:
+  #     - NODE_ENV=development
+  #     - CHOKIDAR_USEPOLLING=true
+  #   depends_on:
+  #     - app 
