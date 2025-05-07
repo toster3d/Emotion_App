@@ -33,9 +33,9 @@ coverage.xml
 
 # PyTorch
 # For this project, we DO want to include model weights
-# *.pt 
-# *.pth
-# *.pkl
+*.pt 
+*.pth
+*.pkl
 .ipynb_checkpoints
 
 # VS Code

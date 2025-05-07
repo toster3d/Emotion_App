@@ -147,7 +147,8 @@ class WeightedEnsembleModel(nn.Module):
             WeightedEnsembleModel: Załadowany model
         """
         try:
-            state = torch.load(path, map_location=device)
+            # Dodanie weights_only=False aby rozwiązać problem z nowymi zabezpieczeniami PyTorch 2.6+
+            state = torch.load(path, map_location=device, weights_only=False)
             
             # Sprawdzenie wersji modelu (opcjonalne)
             if 'model_version' in state and state['model_version'] != '1.0':

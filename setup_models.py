@@ -12,7 +12,7 @@ import torchvision.models as models
 from pathlib import Path
 
 from app.models.resnet_model import AudioResNet
-from app.models.ensemble_model import WeightedEnsembleModel
+from app.models.helpers.ensemble_model import WeightedEnsembleModel
 
 # Define paths
 MODELS_DIR = Path("app/models/saved_models")

@@ -8,6 +8,9 @@ import os
 import sys
 import argparse
 import subprocess
+import shutil
+import webbrowser
+import time
 from pathlib import Path
 
 def setup_models():
@@ -15,35 +18,135 @@ def setup_models():
     print("Setting up dummy models for testing...")
     subprocess.run([sys.executable, "setup_models.py"])
 
-def start_backend(host="127.0.0.1", port=8000, reload=True):
+def start_backend(host="127.0.0.1", port=8000, reload=True, background=False):
     """Start the FastAPI backend."""
     print(f"Starting backend server at http://{host}:{port}...")
-    reload_arg = "--reload" if reload else ""
-    subprocess.run([
+    cmd = [
         sys.executable, 
         "-m", "uvicorn", 
         "app.main:app", 
         "--host", host, 
-        "--port", str(port),
-        reload_arg
-    ])
+        "--port", str(port)
+    ]
+    
+    if reload:
+        cmd.append("--reload")
+    
+    if background:
+        print("Running backend in background mode...")
+        if sys.platform.startswith('win'):
+            # Na Windows używamy osobnej konsoli
+            startupinfo = None
+            try:
+                # Próbujemy uruchomić w osobnym oknie
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                backend_proc = subprocess.Popen(
+                    cmd, 
+                    startupinfo=startupinfo,
+                    stdout=subprocess.PIPE, 
+                    stderr=subprocess.PIPE
+                )
+            except Exception:
+                backend_proc = subprocess.Popen(
+                    cmd, 
+                    shell=True,
+                    stdout=subprocess.PIPE, 
+                    stderr=subprocess.PIPE
+                )
+            
+            # Poczekaj 5 sekund na uruchomienie backendu
+            print("Czekam 5 sekund na uruchomienie API...")
+            time.sleep(5)
+            
+            # Otwórz stronę dokumentacji API
+            webbrowser.open(f"http://{host}:{port}/docs")
+            print(f"Backend API uruchomiony pod adresem: http://{host}:{port}")
+            print(f"Dokumentacja API dostępna pod: http://{host}:{port}/docs")
+            return backend_proc
+        else:
+            # Na Linux/Mac
+            backend_proc = subprocess.Popen(
+                cmd, 
+                stdout=subprocess.PIPE, 
+                stderr=subprocess.PIPE
+            )
+            time.sleep(5)
+            webbrowser.open(f"http://{host}:{port}/docs")
+            print(f"Backend API uruchomiony pod adresem: http://{host}:{port}")
+            return backend_proc
+    else:
+        # Uruchom w głównym procesie (blokująco)
+        subprocess.run(cmd)
+        return None
 
 def start_frontend():
     """Start the React frontend."""
-    os.chdir("app/frontend")
-    print("Starting frontend development server...")
-    subprocess.run(["npm", "start"])
+    # Sprawdź, czy npm jest zainstalowany
+    if not shutil.which("npm"):
+        print("Błąd: npm nie jest zainstalowany lub nie jest dostępny w ścieżce systemowej.")
+        print("Zainstaluj Node.js i npm z https://nodejs.org/, a następnie spróbuj ponownie.")
+        sys.exit(1)
+    
+    # Zapisz oryginalną ścieżkę i zmień katalog
+    original_dir = os.getcwd()
+    frontend_dir = os.path.join(original_dir, "app", "frontend")
+    
+    try:
+        if not os.path.exists(frontend_dir):
+            print(f"Błąd: Katalog frontendu nie istnieje: {frontend_dir}")
+            sys.exit(1)
+            
+        os.chdir(frontend_dir)
+        print("Starting frontend development server...")
+        
+        # Dostosuj komendę w zależności od systemu operacyjnego
+        if sys.platform.startswith('win'):
+            subprocess.run(["npm.cmd", "start"], shell=True)
+        else:
+            subprocess.run(["npm", "start"], shell=True)
+    except Exception as e:
+        print(f"Wystąpił błąd podczas uruchamiania frontendu: {str(e)}")
+        sys.exit(1)
+    finally:
+        # Wróć do oryginalnego katalogu
+        os.chdir(original_dir)
 
 def build_frontend():
     """Build the frontend for production."""
-    os.chdir("app/frontend")
-    print("Building frontend for production...")
-    subprocess.run(["npm", "run", "build"])
+    # Sprawdź, czy npm jest zainstalowany
+    if not shutil.which("npm"):
+        print("Błąd: npm nie jest zainstalowany lub nie jest dostępny w ścieżce systemowej.")
+        print("Zainstaluj Node.js i npm z https://nodejs.org/, a następnie spróbuj ponownie.")
+        sys.exit(1)
+    
+    original_dir = os.getcwd()
+    frontend_dir = os.path.join(original_dir, "app", "frontend")
+    
+    try:
+        if not os.path.exists(frontend_dir):
+            print(f"Błąd: Katalog frontendu nie istnieje: {frontend_dir}")
+            sys.exit(1)
+            
+        os.chdir(frontend_dir)
+        print("Building frontend for production...")
+        
+        # Dostosuj komendę w zależności od systemu operacyjnego
+        if sys.platform.startswith('win'):
+            subprocess.run(["npm.cmd", "run", "build"], shell=True)
+        else:
+            subprocess.run(["npm", "run", "build"], shell=True)
+    except Exception as e:
+        print(f"Wystąpił błąd podczas budowania frontendu: {str(e)}")
+        sys.exit(1)
+    finally:
+        # Wróć do oryginalnego katalogu
+        os.chdir(original_dir)
 
 def start_docker():
     """Start the application using Docker Compose."""
     print("Starting the application with Docker Compose...")
-    subprocess.run(["docker-compose", "up", "--build"])
+    subprocess.run(["docker-compose", "up", "--build"], shell=True)
 
 def main():
     """Parse command line arguments and run the appropriate action."""
@@ -85,4 +188,4 @@ def main():
         parser.print_help()
 
 if __name__ == "__main__":
-    main() 
+    main()

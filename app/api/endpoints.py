@@ -1,14 +1,12 @@
 import tempfile
-import os
 import io
 import logging
-import numpy as np
 import soundfile as sf
 import librosa
 from pathlib import Path
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Query, Form
+from fastapi import APIRouter, UploadFile, File, HTTPException, Query, Form
 from fastapi.responses import JSONResponse
-from typing import List, Optional
+from typing import Optional
 
 from app.core import settings, model_manager
 from app.api.schemas import EmotionPrediction, HealthCheck, ErrorResponse
@@ -106,9 +104,15 @@ async def predict_emotion(
                 
                 return prediction
                 
-            finally:
-                # Clean up the temporary file
-                os.unlink(temp_file_path)
+            except Exception as e:
+                logger.error(f"Szczegółowy błąd ładowania audio: {e}")
+                logger.error(f"Typ pliku: {file.filename}")
+                # Zapisz nieprawidłowy plik do analizy
+                import shutil
+                debug_path = Path("debug_audio")
+                debug_path.mkdir(exist_ok=True)
+                shutil.copy(temp_file_path, debug_path / f"problematic_{file.filename}")
+                raise HTTPException(status_code=500, detail=f"Nie można przetworzyć pliku audio: {str(e)}")
     
     except Exception as e:
         logger.error(f"Error processing audio: {str(e)}")
@@ -164,9 +168,15 @@ async def record_and_predict(
                 
                 return prediction
                 
-            finally:
-                # Clean up the temporary file
-                os.unlink(temp_file_path)
+            except Exception as e:
+                logger.error(f"Szczegółowy błąd ładowania audio: {e}")
+                logger.error(f"Typ pliku: {file.filename}")
+                # Zapisz nieprawidłowy plik do analizy
+                import shutil
+                debug_path = Path("debug_audio")
+                debug_path.mkdir(exist_ok=True)
+                shutil.copy(temp_file_path, debug_path / f"problematic_{file.filename}")
+                raise HTTPException(status_code=500, detail=f"Nie można przetworzyć pliku audio: {str(e)}")
     
     except Exception as e:
         logger.error(f"Error processing recorded audio: {str(e)}")

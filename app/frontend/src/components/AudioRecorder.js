@@ -1,25 +1,77 @@
-import React, { useState, useEffect } from 'react';
-import { Button, Card, ProgressBar } from 'react-bootstrap';
-import { FaMicrophone, FaStop, FaTrash } from 'react-icons/fa';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Button, Card, ProgressBar, Alert } from 'react-bootstrap';
+import { FaMicrophone, FaStop, FaTrash, FaPlay, FaPause } from 'react-icons/fa';
 import { useReactMediaRecorder } from 'react-media-recorder';
 
 const AudioRecorder = ({ onRecordingComplete }) => {
   const [recordingTime, setRecordingTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [audioElement, setAudioElement] = useState(null);
+  const [errorMessage, setErrorMessage] = useState(null);
   const maxRecordingTime = 10; // Maximum recording time in seconds
+  const audioContextRef = useRef(null);
+  
+  // Funkcja do sprawdzania wspieranych formatów audio
+  const getSupportedMimeType = useCallback(() => {
+    const types = [
+      'audio/webm;codecs=opus',
+      'audio/webm',
+      'audio/mp4',
+      'audio/ogg;codecs=opus'
+    ];
+    return types.find(type => MediaRecorder.isTypeSupported(type)) || '';
+  }, []);
   
   const {
     status,
     startRecording,
     stopRecording,
     mediaBlobUrl,
-    clearBlobUrl
+    clearBlobUrl,
+    error
   } = useReactMediaRecorder({
     audio: true,
     video: false,
-    blobPropertyBag: { type: 'audio/wav' }
+    echoCancellation: true,
+    autoGainControl: true,
+    noiseSuppression: true,
+    mediaRecorderOptions: {
+      mimeType: getSupportedMimeType(),
+      audioBitsPerSecond: 128000, // 128 kbps
+    },
+    onError: (err) => {
+      console.error('Media recorder error:', err);
+      setErrorMessage('Nie można uzyskać dostępu do mikrofonu. Sprawdź uprawnienia przeglądarki.');
+    }
   });
+  
+  // Konwersja audio jeśli potrzebne dla backendu
+  const processAudioForBackend = useCallback(async (audioBlob) => {
+    try {
+      // Jeśli backend wymaga WAV, ale przeglądarka nagrała inny format
+      // można tutaj wykonać konwersję
+      // Dla uproszczenia zwracam oryginalny blob
+      return audioBlob;
+    } catch (error) {
+      console.error('Error processing audio format:', error);
+      setErrorMessage('Błąd przetwarzania nagrania audio.');
+      return audioBlob;
+    }
+  }, []);
+  
+  const fetchRecordingBlob = useCallback(async (url) => {
+    if (!url) return;
+    
+    try {
+      const response = await fetch(url);
+      const originalBlob = await response.blob();
+      const processedBlob = await processAudioForBackend(originalBlob);
+      onRecordingComplete(processedBlob);
+    } catch (error) {
+      console.error('Error fetching recording blob:', error);
+      setErrorMessage('Błąd podczas pobierania nagrania.');
+    }
+  }, [onRecordingComplete, processAudioForBackend]);
   
   // Handle recording time counter
   useEffect(() => {
@@ -36,20 +88,39 @@ const AudioRecorder = ({ onRecordingComplete }) => {
       }, 1000);
     } else {
       if (status === 'stopped' && recordingTime > 0 && mediaBlobUrl) {
-        // Create audio element from the recorded blob
         const audio = new Audio(mediaBlobUrl);
         setAudioElement(audio);
-        
-        // Pass the recording to the parent component
-        fetchRecordingBlob();
+        fetchRecordingBlob(mediaBlobUrl);
       }
     }
     
     return () => clearInterval(interval);
-  }, [status, mediaBlobUrl, stopRecording, recordingTime]);
+  }, [status, mediaBlobUrl, stopRecording, recordingTime, fetchRecordingBlob]);
   
-  // Reset everything when starting a new recording
+  // Obsługa błędów z MediaRecorder
+  useEffect(() => {
+    if (error) {
+      console.error('MediaRecorder error:', error);
+      setErrorMessage('Wystąpił błąd podczas nagrywania. Spróbuj ponownie.');
+    }
+  }, [error]);
+  
+  // Czyszczenie zasobów przy odmontowaniu komponentu
+  useEffect(() => {
+    return () => {
+      if (audioElement) {
+        audioElement.pause();
+      }
+      if (audioContextRef.current) {
+        // Skopiuj wartość do lokalnej zmiennej przed użyciem
+        const currentAudioContext = audioContextRef.current;
+        currentAudioContext.close().catch(console.error);
+      }
+    };
+  }, [audioElement]);
+  
   const handleStartRecording = () => {
+    setErrorMessage(null);
     setRecordingTime(0);
     if (audioElement) {
       audioElement.pause();
@@ -59,20 +130,23 @@ const AudioRecorder = ({ onRecordingComplete }) => {
     startRecording();
   };
   
-  // Play the recorded audio
   const handlePlayRecording = () => {
     if (audioElement) {
       if (isPlaying) {
         audioElement.pause();
       } else {
-        audioElement.play();
+        audioElement.onended = () => setIsPlaying(false);
+        audioElement.play().catch(error => {
+          console.error('Error playing audio:', error);
+          setErrorMessage('Nie można odtworzyć nagrania.');
+        });
       }
       setIsPlaying(!isPlaying);
     }
   };
   
-  // Reset everything
   const handleReset = () => {
+    setErrorMessage(null);
     if (audioElement) {
       audioElement.pause();
       setIsPlaying(false);
@@ -82,25 +156,18 @@ const AudioRecorder = ({ onRecordingComplete }) => {
     setAudioElement(null);
   };
   
-  // Get the actual Blob from the mediaBlobUrl
-  const fetchRecordingBlob = async () => {
-    if (!mediaBlobUrl) return;
-    
-    try {
-      const response = await fetch(mediaBlobUrl);
-      const blob = await response.blob();
-      onRecordingComplete(blob);
-    } catch (error) {
-      console.error('Error fetching recording blob:', error);
-    }
-  };
-  
-  // Render recording status
   const renderRecordingStatus = () => {
     if (status === 'recording') {
       return (
         <div className="d-flex align-items-center mb-3">
-          <div className="recording-indicator"></div>
+          <div className="recording-indicator" style={{
+            width: '12px',
+            height: '12px',
+            borderRadius: '50%',
+            backgroundColor: 'red',
+            marginRight: '8px',
+            animation: 'pulse 1s infinite'
+          }}></div>
           <span>Recording... {recordingTime}s / {maxRecordingTime}s</span>
         </div>
       );
@@ -112,6 +179,12 @@ const AudioRecorder = ({ onRecordingComplete }) => {
     <Card className="mb-4">
       <Card.Body>
         <Card.Title>Record Audio</Card.Title>
+        
+        {errorMessage && (
+          <Alert variant="danger" dismissible onClose={() => setErrorMessage(null)}>
+            {errorMessage}
+          </Alert>
+        )}
         
         {renderRecordingStatus()}
         
@@ -145,7 +218,7 @@ const AudioRecorder = ({ onRecordingComplete }) => {
           {mediaBlobUrl && (
             <>
               <Button variant="success" onClick={handlePlayRecording}>
-                {isPlaying ? 'Pause' : 'Play'} Recording
+                {isPlaying ? <><FaPause className="me-2" />Pause</> : <><FaPlay className="me-2" />Play</>} Recording
               </Button>
               
               <Button variant="outline-danger" onClick={handleReset}>
@@ -161,9 +234,26 @@ const AudioRecorder = ({ onRecordingComplete }) => {
             <audio src={mediaBlobUrl} controls className="w-100" />
           </div>
         )}
+        
+        {status === 'idle' && !mediaBlobUrl && (
+          <div className="text-muted mt-3">
+            <small>
+              Nagraj swoją wypowiedź, aby wykryć emocje w głosie. 
+              Najlepsze rezultaty uzyskasz mówiąc wyraźnie, bez hałasu w tle.
+            </small>
+          </div>
+        )}
+
+        <style jsx="true">{`
+          @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.3; }
+            100% { opacity: 1; }
+          }
+        `}</style>
       </Card.Body>
     </Card>
   );
 };
 
-export default AudioRecorder; 
+export default AudioRecorder;

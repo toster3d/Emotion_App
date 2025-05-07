@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 
 from app.core.config import settings
 from app.models.resnet_model import AudioResNet
-from app.models.ensemble_model import WeightedEnsembleModel
+from app.models.helpers.ensemble_model import WeightedEnsembleModel
 
 logger = logging.getLogger(__name__)
 
@@ -33,27 +33,19 @@ class ModelManager:
         self._initialized = True
         self.is_loaded = False
         
-    def _load_resnet_model(self, model_path, feature_type, num_classes=6):
-        """Load a single ResNet model."""
+    def _load_resnet_model(self, model_path, feature_type):
+        """Load a single ResNet model from path."""
         try:
-            model = AudioResNet(num_classes=num_classes)
-            state_dict = torch.load(model_path, map_location=self.device)
+            model = AudioResNet(feature_type=feature_type)
+            # Używanie weights_only=False przy ładowaniu state_dict dla modeli PyTorch
+            state_dict = torch.load(model_path, map_location=self.device, weights_only=False)
             model.load_state_dict(state_dict)
-            model.eval()
-            
-            # Enable JIT optimization for inference
-            with torch.jit.optimized_execution(True):
-                # Create example input for tracing
-                example_input = torch.randn(1, 1, 128, 128, device=self.device)
-                traced_model = torch.jit.trace(model, example_input)
-                
-            # Freeze the model for further optimization
-            traced_model = torch.jit.freeze(traced_model)
-            
-            return traced_model
+            model.to(self.device)
+            model.eval()  # Ustawienie trybu ewaluacji
+            return model
         except Exception as e:
-            logger.error(f"Error loading model {model_path}: {str(e)}")
-            raise RuntimeError(f"Failed to load model {model_path}: {str(e)}")
+            logger.error(f"Error loading {feature_type} model: {str(e)}")
+            raise
     
     def load_models(self):
         """Load all models needed for the ensemble."""
@@ -85,24 +77,15 @@ class ModelManager:
             if not models_dict:
                 raise RuntimeError("No models could be loaded")
             
-            # Load ensemble model if available, or create a new one
-            ensemble_path = models_dir / "ensemble_model.pt"
-            if ensemble_path.exists():
-                logger.info(f"Loading ensemble model from {ensemble_path}")
-                self.ensemble_model = WeightedEnsembleModel.load(
-                    ensemble_path, 
-                    models_dict,
-                    device=self.device
-                )
-            else:
-                logger.info("Creating new ensemble model with default weights")
-                self.ensemble_model = WeightedEnsembleModel(
-                    models_dict,
-                    weights=settings.MODEL_WEIGHTS
-                )
+            # Create ensemble model with default weights
+            logger.info("Creating new ensemble model with model weights")
+            self.ensemble_model = WeightedEnsembleModel(
+                models_dict,
+                weights=settings.MODEL_WEIGHTS
+            )
             
             self.ensemble_model.to(self.device)
-            self.ensemble_model.eval()
+            self.ensemble_model.eval()  # Zapewnienie trybu ewaluacji
             
             self.is_loaded = True
             logger.info("All models loaded successfully")
@@ -128,7 +111,7 @@ class ModelManager:
         device_features = {k: v.to(self.device) for k, v in features.items()}
         
         # Run inference
-        with torch.inference_mode():
+        with torch.inference_mode():  # Używanie inference_mode zamiast no_grad dla lepszej wydajności
             output = self.ensemble_model(device_features)
             
             # Get probabilities and predicted class
