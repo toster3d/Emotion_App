@@ -2,25 +2,25 @@ import React from 'react';
 import { Card, Alert } from 'react-bootstrap';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { 
-  FaSmile, FaSadTear, FaAngry, FaMeh, FaFlushed, FaFrown
+  FaSmile, FaSadTear, FaAngry, FaMeh, FaFlushed, FaSurprise
 } from 'react-icons/fa';
 
 const EMOTION_COLORS = {
-  angry: '#dc3545',  // red
-  disgust: '#198754', // green
+  anger: '#dc3545',  // red
   fear: '#6f42c1',   // purple
-  happy: '#ffc107',  // yellow
-  sad: '#6c757d',    // gray
+  happiness: '#ffc107',  // yellow
   neutral: '#0d6efd', // blue
+  sadness: '#6c757d',    // gray
+  surprised: '#198754', // green
 };
 
 const EMOTION_ICONS = {
-  angry: <FaAngry className="emotion-icon emotion-angry" />,
-  disgust: <FaFlushed className="emotion-icon emotion-disgust" />,
-  fear: <FaFrown className="emotion-icon emotion-fear" />,
-  happy: <FaSmile className="emotion-icon emotion-happy" />,
-  sad: <FaSadTear className="emotion-icon emotion-sad" />,
+  anger: <FaAngry className="emotion-icon emotion-angry" />,
+  fear: <FaFlushed className="emotion-icon emotion-fear" />,
+  happiness: <FaSmile className="emotion-icon emotion-happy" />,
   neutral: <FaMeh className="emotion-icon emotion-neutral" />,
+  sadness: <FaSadTear className="emotion-icon emotion-sad" />,
+  surprised: <FaSurprise className="emotion-icon emotion-surprised" />,
 };
 
 const EmotionResult = ({ result, error }) => {

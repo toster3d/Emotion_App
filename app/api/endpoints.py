@@ -90,6 +90,8 @@ async def predict_emotion(
                     mono=True
                 )
                 
+                logger.info(f"Audio loaded successfully: shape={audio_array.shape}, sr={detected_sr}")
+                
                 # Prepare features for the model
                 logger.info(f"Extracting features from audio file")
                 features = prepare_audio_features(
@@ -98,9 +100,16 @@ async def predict_emotion(
                     required_features=settings.FEATURE_TYPES
                 )
                 
+                # Log tensor shapes for debugging
+                for feature_type, tensor in features.items():
+                    logger.info(f"Feature {feature_type} shape: {tensor.shape}")
+                
                 # Get prediction from the model
                 logger.info(f"Running prediction on extracted features")
                 prediction = await model_manager.predict(features)
+                
+                # Log prediction results
+                logger.info(f"Prediction result: {prediction['emotion']} with confidence {prediction['confidence']}")
                 
                 return prediction
                 
@@ -138,14 +147,42 @@ async def record_and_predict(
     - **sample_rate**: Sample rate of the recorded audio
     """
     try:
-        # Convert the audio data to a numpy array
-        with io.BytesIO(audio_data) as audio_buffer:
-            # Create a temporary file to store the audio
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_file:
-                temp_file.write(audio_data)
-                temp_file_path = temp_file.name
-                
+        logger.info(f"Processing recorded audio: sample_rate={sample_rate}, data size={len(audio_data)} bytes")
+        
+        if len(audio_data) < 1000:
+            logger.warning(f"Otrzymano bardzo mały plik audio ({len(audio_data)} bajtów), może być nieprawidłowy")
+            raise HTTPException(
+                status_code=400,
+                detail="Plik audio jest zbyt mały, nagraj dłuższą próbkę"
+            )
+        
+        # Utwórz folder tymczasowy, jeśli nie istnieje
+        temp_folder = Path("temp_audio")
+        temp_folder.mkdir(exist_ok=True)
+        
+        # Generuj unikalną nazwę pliku
+        import uuid
+        temp_filename = f"recording_{uuid.uuid4()}.wav"
+        temp_file_path = temp_folder / temp_filename
+        
+        try:
+            # Zapisz plik audio
+            with open(temp_file_path, "wb") as f:
+                f.write(audio_data)
+            
+            logger.info(f"Recorded audio saved to temporary file: {temp_file_path}")
+            
             try:
+                # Sprawdź format nagrania
+                try:
+                    import wave
+                    with wave.open(str(temp_file_path), "rb") as wave_file:
+                        wave_params = wave_file.getparams()
+                        logger.info(f"Wave file parameters: channels={wave_params.nchannels}, "
+                                   f"sampwidth={wave_params.sampwidth}, framerate={wave_params.framerate}")
+                except Exception as wave_err:
+                    logger.warning(f"Nie można odczytać jako plik WAV. Próba użycia librosa: {wave_err}")
+                
                 # Load audio using librosa for better compatibility
                 logger.info("Loading recorded audio data")
                 audio_array, detected_sr = librosa.load(
@@ -153,6 +190,12 @@ async def record_and_predict(
                     sr=sample_rate,
                     mono=True
                 )
+                
+                logger.info(f"Audio loaded successfully: shape={audio_array.shape}, sr={detected_sr}")
+                
+                # Check if audio is empty or too short
+                if len(audio_array) < 100:
+                    raise ValueError("Nagranie jest zbyt krótkie lub puste")
                 
                 # Prepare features for the model
                 logger.info("Extracting features from recorded audio")
@@ -162,22 +205,50 @@ async def record_and_predict(
                     required_features=settings.FEATURE_TYPES
                 )
                 
+                # Log tensor shapes for debugging
+                for feature_type, tensor in features.items():
+                    logger.info(f"Feature {feature_type} shape: {tensor.shape}")
+                
                 # Get prediction from the model
                 logger.info("Running prediction on extracted features")
                 prediction = await model_manager.predict(features)
+                
+                # Log prediction results
+                logger.info(f"Prediction result: {prediction['emotion']} with confidence {prediction['confidence']}")
+                
+                # Usuń plik tymczasowy po zakończeniu analizy
+                try:
+                    if temp_file_path.exists():
+                        temp_file_path.unlink()
+                        logger.info(f"Temporary file removed: {temp_file_path}")
+                except Exception as e:
+                    logger.warning(f"Nie można usunąć pliku tymczasowego: {e}")
                 
                 return prediction
                 
             except Exception as e:
                 logger.error(f"Szczegółowy błąd ładowania audio: {e}")
-                logger.error(f"Typ pliku: {file.filename}")
+                logger.error("Typ pliku: nagranie z przeglądarki")
                 # Zapisz nieprawidłowy plik do analizy
                 import shutil
                 debug_path = Path("debug_audio")
                 debug_path.mkdir(exist_ok=True)
-                shutil.copy(temp_file_path, debug_path / f"problematic_{file.filename}")
+                if temp_file_path.exists():
+                    shutil.copy(temp_file_path, debug_path / f"problematic_browser_{temp_filename}")
+                    logger.info(f"Zapisano problematyczny plik do: {debug_path / f'problematic_browser_{temp_filename}'}")
+                
                 raise HTTPException(status_code=500, detail=f"Nie można przetworzyć pliku audio: {str(e)}")
+        finally:
+            # Upewnij się, że plik tymczasowy zostanie usunięty
+            try:
+                if temp_file_path.exists():
+                    temp_file_path.unlink()
+            except Exception as e:
+                logger.warning(f"Nie można usunąć pliku tymczasowego w bloku finally: {e}")
     
+    except HTTPException as he:
+        # Re-throw HTTP exceptions
+        raise he
     except Exception as e:
         logger.error(f"Error processing recorded audio: {str(e)}")
         raise HTTPException(

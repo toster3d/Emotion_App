@@ -1,6 +1,10 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import logging
+
+# Dodanie loggera
+logger = logging.getLogger(__name__)
 
 class WeightedEnsembleModel(nn.Module):
     """
@@ -36,6 +40,10 @@ class WeightedEnsembleModel(nn.Module):
         
         # Generowanie znormalizowanych wag do wnioskowania
         self._update_normalized_weights()
+
+        # Dodanie parametrów kalibracji dla każdego modelu
+        self.calibration_alphas = nn.Parameter(torch.ones(len(self.feature_types)), requires_grad=False)
+        self.calibration_betas = nn.Parameter(torch.zeros(len(self.feature_types)), requires_grad=False)
             
     def _update_normalized_weights(self):
         """Aktualizacja znormalizowanych wag"""
@@ -61,25 +69,46 @@ class WeightedEnsembleModel(nn.Module):
             if ft in inputs:
                 # Uzyskiwanie wyjścia modelu
                 model_output = self.models[ft](inputs[ft])
-                # Skalowanie wyjścia za pomocą temperatury
-                scaled_output = model_output / self.temperature
+                
+                # Zastosowanie kalibracji temperatury
+                # T>1 wygładza prawdopodobieństwa (zmniejsza pewność), 
+                # T<1 zwiększa pewność (zaostrza prawdopodobieństwa)
+                model_temperature = self.temperature * self.calibration_alphas[i]
+                scaled_output = model_output / model_temperature
+                
                 # Zastosowanie softmax w celu uzyskania prawdopodobieństw
                 probs = F.softmax(scaled_output, dim=1)
+                
+                # Dodatkowa kalibracja liniowa: p' = alfa*p + beta
+                if self.calibration_betas[i] != 0:
+                    probs = probs + self.calibration_betas[i]
+                    # Renormalizacja po dodaniu przesunięcia
+                    probs = probs / probs.sum(dim=1, keepdim=True) 
+                
                 outputs.append(probs)
                 available_features.append(i)
+                
+                # Logowanie predykcji poszczególnych modeli
+                logger.debug(f"Model {ft}: Wynik={model_output[0]}, Temperatura={model_temperature.item()}")
         
         if not outputs:
             raise ValueError("Brak danych wejściowych dla modeli")
+        
+        # Jeśli dostępny tylko jeden model/cecha, zwróć jego wynik
+        if len(outputs) == 1:
+            return outputs[0]
         
         # Uzyskiwanie wag dla dostępnych cech i ich normalizacja
         available_weights = self.weights[available_features]
         normalized_weights = F.softmax(available_weights, dim=0)
         
-        # Zastosowanie wag do wyjścia każdego modelu
+        # Zastosowanie wag do wyjścia każdego modelu - metoda podstawowa
         weighted_sum = torch.zeros_like(outputs[0])
         for output, weight in zip(outputs, normalized_weights):
             weighted_sum += output * weight
             
+        # Przekazanie bezpośrednio logitów zamiast stosowania softmax
+        # Umożliwi to zastosowanie odpowiedniej funkcji aktywacji w model_manager
         return weighted_sum
     
     def get_weights(self):
@@ -97,6 +126,21 @@ class WeightedEnsembleModel(nn.Module):
             if ft in weights_dict:
                 self.weights.data[i] = weights_dict[ft]
         self._update_normalized_weights()
+        
+    def set_calibration(self, model_type, alpha=1.0, beta=0.0):
+        """
+        Ustawia parametry kalibracji dla określonego modelu
+        
+        Argumenty:
+            model_type (str): Typ modelu/cechy do kalibracji
+            alpha (float): Parametr skalowania temperatury 
+            beta (float): Parametr przesunięcia
+        """
+        if model_type in self.feature_types:
+            idx = self.feature_types.index(model_type)
+            self.calibration_alphas.data[idx] = alpha
+            self.calibration_betas.data[idx] = beta
+            logger.info(f"Ustawiono kalibrację dla modelu {model_type}: alpha={alpha}, beta={beta}")
     
     def l1_regularization(self):
         """Zastosowanie regulacji L1 w celu promowania rzadkich wag"""
@@ -116,10 +160,13 @@ class WeightedEnsembleModel(nn.Module):
                 'normalized_weights': self.normalized_weights,
                 'temperature': self.temperature.item(),
                 'regularization_strength': self.regularization_strength,
-                'model_version': '1.0',  # Dodanie wersji modelu
+                'calibration_alphas': self.calibration_alphas.tolist(),
+                'calibration_betas': self.calibration_betas.tolist(),
+                'model_version': '1.1',  # Zaktualizowana wersja modelu
                 'pytorch_version': torch.__version__  # Dodanie wersji PyTorch
             }
             torch.save(state, path)
+            logger.info(f"Model zapisany w {path}")
         except Exception as e:
             raise RuntimeError(f"Błąd podczas zapisywania modelu: {str(e)}")
     
@@ -148,11 +195,11 @@ class WeightedEnsembleModel(nn.Module):
         """
         try:
             # Dodanie weights_only=False aby rozwiązać problem z nowymi zabezpieczeniami PyTorch 2.6+
-            state = torch.load(path, map_location=device, weights_only=False)
+            state = torch.load(path, map_location=device, weights_only=True)
             
             # Sprawdzenie wersji modelu (opcjonalne)
             if 'model_version' in state and state['model_version'] != '1.0':
-                print(f"Ostrzeżenie: Ładowany model ma inną wersję ({state['model_version']})")
+                logger.info(f"Ładowany model ma inną wersję ({state['model_version']})")
             
             # Tworzenie modelu z tymi samymi parametrami
             model = cls(
@@ -168,6 +215,15 @@ class WeightedEnsembleModel(nn.Module):
             # Aktualizacja wag po załadowaniu
             model._update_normalized_weights()
             
+            # Ustawienie kalibracji jeśli dostępna w nowej wersji
+            if 'calibration_alphas' in state and 'calibration_betas' in state:
+                alphas = state['calibration_alphas']
+                betas = state['calibration_betas']
+                for i, ft in enumerate(model.feature_types):
+                    if i < len(alphas) and i < len(betas):
+                        model.set_calibration(ft, alpha=alphas[i], beta=betas[i])
+            
+            logger.info(f"Model załadowany z {path}")
             return model
         except Exception as e:
             raise RuntimeError(f"Błąd podczas ładowania modelu: {str(e)}") 

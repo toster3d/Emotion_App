@@ -8,6 +8,9 @@ const AudioRecorder = ({ onRecordingComplete }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [audioElement, setAudioElement] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
+  const [processingAudio, setProcessingAudio] = useState(false); // Flag to prevent multiple submissions
+  const [audioSent, setAudioSent] = useState(false); // Flag to track if audio has been sent already
+  
   const maxRecordingTime = 10; // Maximum recording time in seconds
   const audioContextRef = useRef(null);
   
@@ -60,18 +63,24 @@ const AudioRecorder = ({ onRecordingComplete }) => {
   }, []);
   
   const fetchRecordingBlob = useCallback(async (url) => {
-    if (!url) return;
+    if (!url || processingAudio || audioSent) return;
     
     try {
+      setProcessingAudio(true);
       const response = await fetch(url);
       const originalBlob = await response.blob();
       const processedBlob = await processAudioForBackend(originalBlob);
+      
+      // Save flag that we've sent this audio
+      setAudioSent(true);
       onRecordingComplete(processedBlob);
     } catch (error) {
       console.error('Error fetching recording blob:', error);
       setErrorMessage('Błąd podczas pobierania nagrania.');
+    } finally {
+      setProcessingAudio(false);
     }
-  }, [onRecordingComplete, processAudioForBackend]);
+  }, [onRecordingComplete, processAudioForBackend, processingAudio, audioSent]);
   
   // Handle recording time counter
   useEffect(() => {
@@ -86,16 +95,15 @@ const AudioRecorder = ({ onRecordingComplete }) => {
           return prevTime + 1;
         });
       }, 1000);
-    } else {
-      if (status === 'stopped' && recordingTime > 0 && mediaBlobUrl) {
-        const audio = new Audio(mediaBlobUrl);
-        setAudioElement(audio);
-        fetchRecordingBlob(mediaBlobUrl);
-      }
+    } else if (status === 'stopped' && recordingTime > 0 && mediaBlobUrl && !audioSent) {
+      // Only create audio element and fetch blob if audio hasn't been sent yet
+      const audio = new Audio(mediaBlobUrl);
+      setAudioElement(audio);
+      fetchRecordingBlob(mediaBlobUrl);
     }
     
     return () => clearInterval(interval);
-  }, [status, mediaBlobUrl, stopRecording, recordingTime, fetchRecordingBlob]);
+  }, [status, mediaBlobUrl, stopRecording, recordingTime, fetchRecordingBlob, audioSent]);
   
   // Obsługa błędów z MediaRecorder
   useEffect(() => {
@@ -122,6 +130,8 @@ const AudioRecorder = ({ onRecordingComplete }) => {
   const handleStartRecording = () => {
     setErrorMessage(null);
     setRecordingTime(0);
+    setAudioSent(false); // Reset the flag when starting a new recording
+    
     if (audioElement) {
       audioElement.pause();
       setIsPlaying(false);
@@ -147,6 +157,8 @@ const AudioRecorder = ({ onRecordingComplete }) => {
   
   const handleReset = () => {
     setErrorMessage(null);
+    setAudioSent(false); // Reset the flag when resetting
+    
     if (audioElement) {
       audioElement.pause();
       setIsPlaying(false);
@@ -196,12 +208,19 @@ const AudioRecorder = ({ onRecordingComplete }) => {
           />
         )}
         
+        {processingAudio && (
+          <Alert variant="info">
+            <Alert.Heading>Trwa przetwarzanie...</Alert.Heading>
+            <p>Proszę czekać, nagranie jest przygotowywane do analizy.</p>
+          </Alert>
+        )}
+        
         <div className="d-flex gap-2">
           {status !== 'recording' && (
             <Button 
               variant="primary" 
               onClick={handleStartRecording} 
-              disabled={status === 'acquiring_media'}
+              disabled={status === 'acquiring_media' || processingAudio}
             >
               <FaMicrophone className="me-2" />
               {status === 'acquiring_media' ? 'Preparing...' : 'Start Recording'}
@@ -217,11 +236,11 @@ const AudioRecorder = ({ onRecordingComplete }) => {
           
           {mediaBlobUrl && (
             <>
-              <Button variant="success" onClick={handlePlayRecording}>
+              <Button variant="success" onClick={handlePlayRecording} disabled={processingAudio}>
                 {isPlaying ? <><FaPause className="me-2" />Pause</> : <><FaPlay className="me-2" />Play</>} Recording
               </Button>
               
-              <Button variant="outline-danger" onClick={handleReset}>
+              <Button variant="outline-danger" onClick={handleReset} disabled={processingAudio}>
                 <FaTrash className="me-2" />
                 Reset
               </Button>
