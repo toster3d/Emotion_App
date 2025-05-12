@@ -6,8 +6,9 @@ from fastapi.staticfiles import StaticFiles
 import os
 import time
 
-from app.core import settings, lifespan_model_loading
+from app.core.config import settings
 from app.api import api_router
+from app.core import lifespan_model_loading
 
 # Configure logging
 logging.basicConfig(

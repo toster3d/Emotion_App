@@ -14,13 +14,20 @@ class Settings(BaseSettings):
     BACKEND_CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:8000"]
     
     # Model settings
-    MODELS_DIR: Path = Path("app/models/saved_models")
+    MODELS_DIR: Path = Path(__file__).parent.parent / "models" / "saved_models"
+    DEFAULT_MODEL_PATH: Path = MODELS_DIR / "melspectrogram_model.pt"
+    DEFAULT_STATS_PATH: Path = MODELS_DIR / "melspectrogram_stats.json"
+    DEFAULT_FEATURE_TYPE: str = "melspectrogram"
     DEFAULT_SAMPLE_RATE: int = 24000
     MAX_AUDIO_LENGTH_SECONDS: float = 10.0
     EMOTION_LABELS: list[str] = ["anger", "fear", "happiness", "neutral", "sadness", "surprised"]
     
-    # Audio feature extraction settings
-    FEATURE_TYPES: list[str] = ["melspectrogram", "mfcc", "chroma"]
+    # Simplified feature types for melspectrogram-only model
+    FEATURE_TYPES: list[str] = ["melspectrogram"]
+    
+    # Audio feature extraction setting
+    TARGET_LENGTH = 141
+    DEFAULT_SAMPLE_RATE = 24000
     N_MELS: int = 128
     N_MFCC: int = 40
     N_CHROMA: int = 12
@@ -40,6 +47,9 @@ class Settings(BaseSettings):
     
     # Fast API settings
     WORKERS: int = 2
+    
+    # Dodatkowe ustawienia dla feature extraction
+    TARGET_LENGTH: int = 141  # Długość docelowa dla cech
     
     class Config:
         case_sensitive = True
