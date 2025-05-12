@@ -13,24 +13,27 @@ class AudioResNet(nn.Module):
         feature_type (str): Typ cech audio ("melspectrogram", "mfcc", "chroma")
         dropout_rate (float): Współczynnik dropout dla warstwy regularyzacyjnej
     """
-    def __init__(self, num_classes=6, feature_type="melspectrogram", dropout_rate=0.5):
+    def __init__(self, feature_type=None, num_classes=6, dropout_rate=0.5):
         super(AudioResNet, self).__init__()
         self.feature_type = feature_type
-        
-        # Wczytanie pretrainowanego modelu ResNet18
         self.resnet = models.resnet18(weights=None)
-        
-        # Modyfikacja pierwszej warstwy konwolucyjnej, aby akceptowała 1 kanał
-        # (domyślnie 3 kanały dla RGB)
         self.resnet.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
         
-        # Zastąpienie ostatniej warstwy
         num_features = self.resnet.fc.in_features
-        self.resnet.fc = nn.Identity()  # Usunięcie oryginalnej warstwy fc
-        
-        # Dodanie własnych warstw
         self.dropout = nn.Dropout(dropout_rate)
+        self.resnet.fc = nn.Identity()  # Ostatnia warstwa została usunięta
         self.fc = nn.Linear(num_features, num_classes)
+        
+        # Inicjalizacja wag dla różnych warstw modelu
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+            elif isinstance(m, nn.BatchNorm2d):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+            elif isinstance(m, nn.Linear):
+                nn.init.xavier_normal_(m.weight)
+                nn.init.constant_(m.bias, 0)
         
     def forward(self, x):
         """
@@ -42,13 +45,8 @@ class AudioResNet(nn.Module):
         Zwraca:
             torch.Tensor: Logits dla każdej klasy, kształt [batch_size, num_classes]
         """
-        # Ekstrakcja cech przez ResNet
+        # Przechodzenie danych przez model
         x = self.resnet(x)
-        
-        # Dropout dla regularyzacji
         x = self.dropout(x)
-        
-        # Warstwa klasyfikacyjna
         x = self.fc(x)
-        
         return x 

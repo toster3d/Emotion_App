@@ -1,0 +1,24 @@
+{
+  "feature_types": [
+    "melspectrogram",
+    "mfcc",
+    "chroma"
+  ],
+  "normalized_weights": {
+    "melspectrogram": 0.3232499659061432,
+    "mfcc": 0.40619194507598877,
+    "chroma": 0.27055802941322327
+  },
+  "temperature": 1.0,
+  "regularization_strength": 0.01,
+  "class_names": [
+    "anger",
+    "fear",
+    "happiness",
+    "neutral",
+    "sadness",
+    "surprised"
+  ],
+  "model_version": "1.0",
+  "pytorch_version": "2.7.0+cpu"
+}

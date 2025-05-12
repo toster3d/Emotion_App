@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 class EmotionProbability(BaseModel):
     """Individual emotion probability."""

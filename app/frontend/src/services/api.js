@@ -45,7 +45,7 @@ export const predictEmotionFromFile = async (file, sampleRate = null) => {
 };
 
 // Predict emotion from recorded audio
-export const predictEmotionFromRecording = async (audioBlob, sampleRate = 16000) => {
+export const predictEmotionFromRecording = async (audioBlob, sampleRate = 24000) => {
   try {
     const formData = new FormData();
     formData.append('audio_data', audioBlob);

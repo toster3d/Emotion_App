@@ -50,19 +50,34 @@ async def health_check():
 @router.post(
     "/predict", 
     response_model=EmotionPrediction,
-    responses={400: {"model": ErrorResponse}},
+    responses={
+        400: {"model": ErrorResponse, "description": "Invalid input"},
+        422: {"model": ErrorResponse, "description": "Validation error"},
+        500: {"model": ErrorResponse, "description": "Internal server error"}
+    },
     tags=["prediction"]
 )
 async def predict_emotion(
-    file: UploadFile = File(...),
-    sample_rate: Optional[int] = Query(None, description="Sample rate to use for processing. If not provided, will be detected or default to 16000Hz.")
+    file: UploadFile = File(..., description="Audio file to analyze"),
+    sample_rate: Optional[int] = Query(
+        None, 
+        description="Sample rate to use for processing. If not provided, will be detected or default to 24000Hz.",
+        ge=8000,
+        le=48000
+    )
 ):
     """
     Predict emotion from an uploaded audio file.
     
     - **file**: Audio file to analyze (mp3, wav, ogg, flac, m4a, webm)
-    - **sample_rate**: Optional sample rate override
+    - **sample_rate**: Optional sample rate override (8000-48000 Hz)
     """
+    if not model_manager.is_loaded:
+        raise HTTPException(
+            status_code=503,
+            detail="Model service is not ready. Please try again in a few moments."
+        )
+    
     # Validate the file
     if not validate_audio_file(file):
         raise HTTPException(
@@ -73,6 +88,12 @@ async def predict_emotion(
     try:
         # Read the uploaded file content
         audio_content = await file.read()
+        
+        if len(audio_content) > settings.MAX_UPLOAD_SIZE:
+            raise HTTPException(
+                status_code=400,
+                detail=f"File too large. Maximum size is {settings.MAX_UPLOAD_SIZE/1024/1024}MB"
+            )
         
         # Convert to in-memory file for reading with librosa
         with io.BytesIO(audio_content) as audio_buffer:
@@ -138,7 +159,7 @@ async def predict_emotion(
 )
 async def record_and_predict(
     audio_data: bytes = File(..., description="Raw audio data as bytes"),
-    sample_rate: int = Form(16000, description="Sample rate of the recorded audio")
+    sample_rate: int = Form(24000, description="Sample rate of the recorded audio")
 ):
     """
     Predict emotion from audio data recorded in the browser.

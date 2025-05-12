@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     
     # Model settings
     MODELS_DIR: Path = Path("app/models/saved_models")
-    DEFAULT_SAMPLE_RATE: int = 16000
+    DEFAULT_SAMPLE_RATE: int = 24000
     MAX_AUDIO_LENGTH_SECONDS: float = 10.0
     EMOTION_LABELS: list[str] = ["anger", "fear", "happiness", "neutral", "sadness", "surprised"]
     
@@ -29,22 +29,9 @@ class Settings(BaseSettings):
     
     # Ensemble model weights
     MODEL_WEIGHTS: dict[str, float] = {
-        "melspectrogram": 0.4,
-        "mfcc": 0.4,
-        "chroma": 0.2,
-    }
-    
-    # Model calibration parametrs
-    MODEL_CALIBRATION: dict[str, dict[str, float]] = {
-        "melspectrogram": {"alpha": 1.2, "beta": 0.0},  # Zmniejszenie pewności modelu melspectrogram
-        "mfcc": {"alpha": 1.0, "beta": 0.0},            # Bez zmian dla mfcc
-        "chroma": {"alpha": 0.8, "beta": 0.0}           # Zwiększenie pewności modelu chroma
-    }
-    
-    # Korekta bias dla modeli
-    BIAS_CORRECTION: dict[str, list[float]] = {
-        # Korekta bias dla klas [anger, fear, happiness, neutral, sadness, surprised]
-        "ensemble": [-0.1, 0.02, 0.02, 0.03, 0.02, 0.01]  # Zmniejszenie bias dla klasy "anger"
+        "chroma": 0.13857384163072003,
+        "melspectrogram": 0.31651310994496806,
+        "mfcc": 0.544913048424312
     }
     
     # File upload settings
