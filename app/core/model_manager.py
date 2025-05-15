@@ -1,116 +1,118 @@
-import torch
+import os
 import logging
-from typing import Any
-import json
+import numpy as np
+import torch
 from pathlib import Path
-from contextlib import asynccontextmanager
+from typing import Dict, Any, Optional, Union
 
-from app.core.config import settings
-from app.models.resnet_model import AudioResNet
-from app.models.feature_extraction import AudioFeatureExtractor
+from app.core import settings
+from app.models.audio_resnet import AudioResNet
 
 logger = logging.getLogger(__name__)
 
 class ModelManager:
-    def __init__(
-        self, 
-        model_path: str | Path = settings.DEFAULT_MODEL_PATH, 
-        feature_type: str = settings.DEFAULT_FEATURE_TYPE, 
-        num_classes: int = len(settings.EMOTION_LABELS)
-    ):
-        """
-        Initialize model manager with flexible configuration
-        
-        Args:
-            model_path: Path to the trained model
-            feature_type: Type of audio feature
-            num_classes: Number of emotion classes
-        """
-        # Convert to Path if string
-        model_path = Path(model_path)
-        
-        # Validate model path
-        if not model_path.exists():
-            raise FileNotFoundError(f"Model not found at {model_path}")
-        
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.feature_extractor = AudioFeatureExtractor(feature_type)
-        
-        # Model definition and loading
-        self.model = AudioResNet(num_classes=num_classes)
-        self.model.load_state_dict(torch.load(model_path, map_location=self.device))
-        self.model.to(self.device)
-        self.model.eval()  # Evaluation mode
-        
-        # Emotion class names
-        self.class_names = settings.EMOTION_LABELS
-        self.is_loaded = True
+    """
+    Class responsible for loading and managing ML models for emotion recognition
+    """
     
-    def load_models(self):
+    def __init__(self, model_path: Optional[Union[str, Path]] = None):
         """
-        Load models (for compatibility with lifespan context)
-        
-        This method is a no-op since models are loaded in the constructor,
-        but it's kept for backward compatibility.
-        """
-        if not self.is_loaded:
-            logger.warning("Model not loaded. Attempting to reload.")
-            # Reinitialize the model manager if not loaded
-            self.__init__()
-        return self
-    
-    def predict(self, audio_data: Any) -> dict[str, Any]:
-        """
-        Predict emotion from an audio sample
-        
-        Args:
-            audio_data: Audio sample (path or array)
-        
-        Returns:
-            Prediction results
-        """
-        # Feature extraction
-        feature = self.feature_extractor.extract_feature(audio_data)
-        feature = feature.to(self.device)
-        
-        # Prediction
-        with torch.no_grad():
-            outputs = self.model(feature)
-            probabilities = torch.softmax(outputs, dim=1)
-            predicted_class = torch.argmax(probabilities, dim=1)
-        
-        return {
-            'emotion': self.class_names[predicted_class.item()],
-            'probabilities': {
-                name: prob.item() for name, prob in 
-                zip(self.class_names, probabilities[0])
-            },
-            'confidence': probabilities[0][predicted_class].item()
-        }
-    
-    def batch_predict(self, audio_files: list[Any]) -> list[dict[str, Any]]:
-        """
-        Predict emotions for multiple audio samples
-        
-        Args:
-            audio_files: List of audio samples
-        
-        Returns:
-            List of prediction results
-        """
-        return [self.predict(audio) for audio in audio_files]
+        Initialize the model manager with specified model path or default path
 
-# Global model manager instance
-model_manager = ModelManager()
+        Args:
+            model_path: Path to the trained model file (.pt)
+        """
+        self.model_path = Path(model_path) if model_path else Path(settings.PRETRAINED_MODEL_PATH)
+        self.device = torch.device("cuda" if torch.cuda.is_available() and settings.USE_CUDA else "cpu")
+        self.model = None
+        self.is_loaded = False
+        
+        logger.info(f"Initializing ModelManager with model path: {self.model_path}, device: {self.device}")
+        
+        # Load the model
+        try:
+            self._load_model()
+        except Exception as e:
+            logger.error(f"Failed to load model: {str(e)}")
+            raise
+    
+    def _load_model(self) -> None:
+        """
+        Load the PyTorch model from the specified path
+        """
+        if not self.model_path.exists():
+            logger.error(f"Model file not found at {self.model_path}")
+            raise FileNotFoundError(f"Model file not found at {self.model_path}")
+        
+        try:
+            logger.info(f"Loading model from {self.model_path}")
+            
+            # Initialize the model
+            self.model = AudioResNet(num_classes=len(settings.CLASS_NAMES), dropout_rate=0.5)
+            
+            # Load state dictionary
+            state_dict = torch.load(self.model_path, map_location=self.device)
+            self.model.load_state_dict(state_dict)
+            
+            # Move model to device and set to evaluation mode
+            self.model.to(self.device)
+            self.model.eval()
+            
+            logger.info(f"Model loaded successfully and moved to {self.device}")
+            self.is_loaded = True
+            
+        except Exception as e:
+            logger.error(f"Error loading model: {str(e)}")
+            self.is_loaded = False
+            raise
+    
+    def predict(self, features: np.ndarray) -> Dict[str, Any]:
+        """
+        Make a prediction using the loaded model
 
-@asynccontextmanager
-async def lifespan_model_loading(app):
-    """FastAPI lifespan context manager"""
-    try:
-        model_manager.load_models()
-        yield
-    except Exception as e:
-        logger.error(f"Startup error: {str(e)}")
-        raise
-    finally:
-        logger.info("Shutting down model service")
+        Args:
+            features: Audio features in the format expected by the model 
+                      (preprocessed melspectrogram)
+
+        Returns:
+            Dictionary containing predicted emotion, confidence, and probabilities
+        """
+        if not self.is_loaded or self.model is None:
+            logger.error("Model is not loaded. Cannot make prediction.")
+            raise RuntimeError("Model is not loaded. Cannot make prediction.")
+        
+        try:
+            # Ensure features have correct shape (batch, channel, height, width)
+            if len(features.shape) == 3:  # (channel, height, width)
+                features = np.expand_dims(features, axis=0)
+            
+            # Convert to tensor
+            features_tensor = torch.FloatTensor(features).to(self.device)
+            
+            # Get model prediction
+            with torch.no_grad():
+                outputs = self.model(features_tensor)
+                probabilities = torch.nn.functional.softmax(outputs, dim=1).cpu().numpy()[0]
+            
+            # Get predicted class index and confidence
+            predicted_idx = np.argmax(probabilities)
+            confidence = float(probabilities[predicted_idx])
+            
+            # Map index to emotion name
+            predicted_emotion = settings.CLASS_NAMES[predicted_idx]
+            
+            # Create dictionary of all probabilities
+            all_probabilities = {
+                emotion: float(prob) 
+                for emotion, prob in zip(settings.CLASS_NAMES, probabilities)
+            }
+            
+            return {
+                "emotion": predicted_emotion,
+                "confidence": confidence,
+                "probabilities": all_probabilities
+            }
+            
+        except Exception as e:
+            logger.error(f"Error during prediction: {str(e)}")
+            raise
