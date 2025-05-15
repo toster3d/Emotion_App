@@ -1,246 +1,169 @@
 import tempfile
+import uuid
 import logging
-import librosa
 from pathlib import Path
+
+import librosa  # type: ignore
+import numpy as np
+
+from numpy.typing import NDArray
 from fastapi import APIRouter, UploadFile, File, HTTPException, Query, Form
 
 from app.core.settings import settings
-from app.core.model_manager import ModelManager
+from app.core.model_manager import model_manager
 from app.api.schemas import EmotionPrediction, HealthCheck, ErrorResponse
-from app.models.feature_extraction import prepare_audio_features
-
-# Initialize model manager
-try:
-    model_manager = ModelManager()
-except Exception as e:
-    logging.error(f"Failed to initialize model manager: {e}")
-    model_manager = None
+from app.models.feature_extraction import AudioFeatures, prepare_audio_features
+from app.core.model_manager import PredictionResult
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+
 def validate_audio_file(file: UploadFile) -> bool:
-    """Validate that the uploaded file is a valid audio file."""
-    if file.filename is None:
+    if not file.filename:
         return False
-        
-    file_ext = file.filename.split('.')[-1].lower()
-    return file_ext in settings.ALLOWED_AUDIO_EXTENSIONS
+    ext = file.filename.rsplit(".", 1)[-1].lower()
+    return ext in settings.ALLOWED_AUDIO_EXTENSIONS
+
 
 @router.get("/health", response_model=HealthCheck, tags=["health"])
-async def health_check():
-    """Check if the API is running and models are loaded."""
-    if model_manager is None:
+async def health_check() -> HealthCheck:
+    if not model_manager.is_loaded:
         return HealthCheck(
-            status="error", 
+            status="error",
             models_loaded=False,
             available_models=[],
             device="N/A"
         )
-    
     return HealthCheck(
-        status="ok", 
+        status="ok",
         models_loaded=model_manager.is_loaded,
         available_models=["melspectrogram"],
         device=str(model_manager.device)
     )
 
+
 @router.post(
-    "/predict", 
+    "/predict",
     response_model=EmotionPrediction,
     responses={
-        400: {"model": ErrorResponse, "description": "Invalid input"},
-        422: {"model": ErrorResponse, "description": "Validation error"},
-        500: {"model": ErrorResponse, "description": "Internal server error"}
+        400: {"model": ErrorResponse},
+        422: {"model": ErrorResponse},
+        500: {"model": ErrorResponse}
     },
     tags=["prediction"]
 )
 async def predict_emotion(
     file: UploadFile = File(..., description="Audio file to analyze"),
     sample_rate: int | None = Query(
-        None, 
-        description="Sample rate to use for processing. If not provided, will use default.",
+        None,
+        description="Sample rate override (8000–48000 Hz)",
         ge=8000,
         le=48000
     )
-):
-    """
-    Predict emotion from an uploaded audio file.
+) -> EmotionPrediction:
+    if not model_manager.is_loaded:
+        raise HTTPException(503, "Model service not initialized.")
+    # if not validate_audio_file(file):
+    #     raise HTTPException(400, f"Unsupported audio format. Allowed: {settings.ALLOWED_AUDIO_EXTENSIONS}")
     
-    - **file**: Audio file to analyze (mp3, wav, ogg, flac, m4a, webm)
-    - **sample_rate**: Optional sample rate override (8000-48000 Hz)
-    """
-    if model_manager is None:
+    filename = file.filename
+    
+    if not filename:
+        raise HTTPException(400, "Missing filename in upload")
+    ext = filename.rsplit(".", 1)[-1].lower()
+    if ext not in settings.ALLOWED_AUDIO_EXTENSIONS:
         raise HTTPException(
-            status_code=503,
-            detail="Model service is not initialized. Please contact support."
+            400,
+            f"Unsupported audio format: .{ext}. Allowed: {settings.ALLOWED_AUDIO_EXTENSIONS}"
         )
     
-    # Validate the file
-    if not validate_audio_file(file):
-        raise HTTPException(
-            status_code=400, 
-            detail="Invalid audio file. Supported formats: mp3, wav, ogg, flac, m4a, webm"
-        )
-    
+    # Wczytaj plik do pamięci
+    content = await file.read()
+    if len(content) > settings.MAX_UPLOAD_SIZE:
+        raise HTTPException(400, f"File too large ({settings.MAX_UPLOAD_SIZE/1e6}MB max)")
+
+    # Zapisz tymczasowo na dysku, by librosa mogło odczytać format
+    suffix = f".{ext}"
+    tmp_path: str
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        tmp.write(content)
+        tmp_path = tmp.name
+
     try:
-        # Read the uploaded file content
-        audio_content = await file.read()
-        
-        if len(audio_content) > settings.MAX_UPLOAD_SIZE:
-            raise HTTPException(
-                status_code=400,
-                detail=f"File too large. Maximum size is {settings.MAX_UPLOAD_SIZE/1024/1024}MB"
-            )
-        
-        # Convert to in-memory file for reading with librosa
-        with tempfile.NamedTemporaryFile(suffix=f".{file.filename.split('.')[-1]}", delete=False) as temp_file:
-            temp_file.write(audio_content)
-            temp_file_path = temp_file.name
-        
-        try:
-            # Load audio using librosa for better compatibility
-            logger.info(f"Loading audio file {file.filename}")
-            audio_array, detected_sr = librosa.load(
-                temp_file_path, 
-                sr=sample_rate or settings.DEFAULT_SAMPLE_RATE,
-                mono=True
-            )
-            
-            logger.info(f"Audio loaded successfully: shape={audio_array.shape}, sr={detected_sr}")
-            
-            # Prepare features for the model
-            logger.info(f"Extracting features from audio file")
-            features = prepare_audio_features(
-                audio_array, 
-                detected_sr
-            )
-            
-            # Get prediction from the model
-            logger.info(f"Running prediction on extracted features")
-            prediction = model_manager.predict(features['melspectrogram'])
-            
-            # Log prediction results
-            logger.info(f"Prediction result: {prediction['emotion']} with confidence {prediction['confidence']}")
-            
-            return prediction
-            
-        except Exception as e:
-            logger.error(f"Error processing audio: {e}")
-            raise HTTPException(status_code=500, detail=f"Cannot process audio file: {str(e)}")
-        
-        finally:
-            # Clean up temporary file
-            try:
-                Path(temp_file_path).unlink()
-            except Exception as cleanup_error:
-                logger.warning(f"Could not remove temporary file: {cleanup_error}")
-    
+        audio_array: NDArray[np.float32]
+        detected_sr: int
+        audio_array, detected_sr = librosa.load( # type: ignore
+            tmp_path,
+            sr=sample_rate or settings.DEFAULT_SAMPLE_RATE,
+            mono=True
+        )
+
+        # Wyciągnij cechy
+        features: AudioFeatures = prepare_audio_features(audio_array, detected_sr)
+
+        # Predykcja
+        prediction_dict: PredictionResult = model_manager.predict(
+            features["melspectrogram"]
+        )
+
+        # Konwersja do Pydantic
+        prediction = EmotionPrediction(**prediction_dict)
+        return prediction
+
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Unexpected error processing audio: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Unexpected error processing audio: {str(e)}"
-        )
+        logger.error(f"Error processing /predict: {e}")
+        raise HTTPException(500, f"Cannot process audio file: {e}")
+    finally:
+        try:
+            Path(tmp_path).unlink()
+        except Exception:
+            logger.warning(f"Could not delete temp file {tmp_path}")
+
 
 @router.post(
-    "/record", 
+    "/record",
     response_model=EmotionPrediction,
-    responses={400: {"model": ErrorResponse}},
+    responses={400: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
     tags=["prediction"]
 )
 async def record_and_predict(
-    audio_data: bytes = File(..., description="Raw audio data as bytes"),
-    sample_rate: int = Form(settings.DEFAULT_SAMPLE_RATE, description="Sample rate of the recorded audio")
-):
-    """
-    Predict emotion from audio data recorded in the browser.
-    
-    - **audio_data**: Raw audio data as bytes
-    - **sample_rate**: Sample rate of the recorded audio
-    """
-    if model_manager is None:
-        raise HTTPException(
-            status_code=503,
-            detail="Model service is not initialized. Please contact support."
-        )
-    
+    audio_data: bytes = File(..., description="Raw audio bytes"),
+    sample_rate: int = Form(settings.DEFAULT_SAMPLE_RATE, description="Sample rate of recording")
+) -> EmotionPrediction:
+    if not model_manager.is_loaded:
+        raise HTTPException(503, "Model service not initialized.")
+    if len(audio_data) < 1000:
+        raise HTTPException(400, "Recorded audio too short.")
+
+    temp_dir = Path("temp_audio")
+    temp_dir.mkdir(exist_ok=True)
+    tmp_file = temp_dir / f"rec_{uuid.uuid4()}.wav"
+    tmp_file.write_bytes(audio_data)
+
     try:
-        logger.info(f"Processing recorded audio: sample_rate={sample_rate}, data size={len(audio_data)} bytes")
-        
-        if len(audio_data) < 1000:
-            logger.warning(f"Received very small audio file ({len(audio_data)} bytes)")
-            raise HTTPException(
-                status_code=400,
-                detail="Audio file is too small, record a longer sample"
-            )
-        
-        # Create temporary folder
-        temp_folder = Path("temp_audio")
-        temp_folder.mkdir(exist_ok=True)
-        
-        # Generate unique filename
-        import uuid
-        temp_filename = f"recording_{uuid.uuid4()}.wav"
-        temp_file_path = temp_folder / temp_filename
-        
-        try:
-            # Save audio file
-            with open(temp_file_path, "wb") as f:
-                f.write(audio_data)
-            
-            logger.info(f"Recorded audio saved to temporary file: {temp_file_path}")
-            
-            # Load audio using librosa
-            logger.info("Loading recorded audio data")
-            audio_array, detected_sr = librosa.load(
-                temp_file_path, 
-                sr=sample_rate,
-                mono=True
-            )
-            
-            logger.info(f"Audio loaded successfully: shape={audio_array.shape}, sr={detected_sr}")
-            
-            # Check if audio is empty or too short
-            if len(audio_array) < 100:
-                raise ValueError("Recording is too short or empty")
-            
-            # Prepare features for the model
-            logger.info("Extracting features from recorded audio")
-            features = prepare_audio_features(
-                audio_array, 
-                detected_sr
-            )
-            
-            # Get prediction from the model
-            logger.info("Running prediction on extracted features")
-            prediction = model_manager.predict(features['melspectrogram'])
-            
-            # Log prediction results
-            logger.info(f"Prediction result: {prediction['emotion']} with confidence {prediction['confidence']}")
-            
-            return prediction
-            
-        except Exception as e:
-            logger.error(f"Error processing recorded audio: {e}")
-            raise HTTPException(status_code=500, detail=f"Cannot process audio file: {str(e)}")
-        
-        finally:
-            # Ensure temporary file is removed
-            try:
-                if temp_file_path.exists():
-                    temp_file_path.unlink()
-                    logger.info(f"Temporary file removed: {temp_file_path}")
-            except Exception as cleanup_error:
-                logger.warning(f"Could not remove temporary file: {cleanup_error}")
-    
+        audio_array: NDArray[np.float32]
+        detected_sr: int
+        audio_array, detected_sr = librosa.load(tmp_file, sr=sample_rate, mono=True) # type: ignore
+
+        features: AudioFeatures = prepare_audio_features(audio_array, detected_sr)
+        prediction_dict: PredictionResult = model_manager.predict(
+            features["melspectrogram"]
+        )
+        prediction = EmotionPrediction(**prediction_dict)
+        return prediction
+
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Unexpected error processing recorded audio: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Unexpected error processing recorded audio: {str(e)}"
-        ) 
+        logger.error(f"Error processing /record: {e}")
+        raise HTTPException(500, f"Cannot process recorded audio: {e}")
+
+    finally:
+        try:
+            tmp_file.unlink()
+            logger.info(f"Removed temp file {tmp_file}")
+        except Exception:
+            logger.warning(f"Failed to remove temp file {tmp_file}")

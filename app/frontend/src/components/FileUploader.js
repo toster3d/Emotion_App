@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Form, Button, Card, ProgressBar, Alert } from 'react-bootstrap';
 import { FaUpload, FaTrash } from 'react-icons/fa';
+import './FileUploader.css'; // Import custom CSS
 
 const FileUploader = ({ onFileSelected }) => {
   const [selectedFile, setSelectedFile] = useState(null);
@@ -8,17 +9,33 @@ const FileUploader = ({ onFileSelected }) => {
   const [error, setError] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const audioRef = useRef(null);
+  const fileInputRef = useRef(null);
   
   const validFileTypes = ['audio/mp3', 'audio/wav', 'audio/ogg', 'audio/flac', 'audio/m4a', 'audio/webm'];
   const maxFileSize = 10 * 1024 * 1024; // 10MB
+  
+  // Cleanup function to revoke object URLs
+  useEffect(() => {
+    return () => {
+      if (preview) {
+        URL.revokeObjectURL(preview);
+      }
+    };
+  }, [preview]);
   
   const handleFileChange = (event) => {
     const file = event.target.files[0];
     setError(null);
     
+    // Revoke previous preview URL to prevent memory leaks
+    if (preview) {
+      URL.revokeObjectURL(preview);
+      setPreview(null);
+    }
+    
     if (!file) {
       setSelectedFile(null);
-      setPreview(null);
       return;
     }
     
@@ -32,7 +49,6 @@ const FileUploader = ({ onFileSelected }) => {
         !file.name.endsWith('.webm')) {
       setError('Please select a valid audio file (MP3, WAV, OGG, FLAC, M4A, WEBM)');
       setSelectedFile(null);
-      setPreview(null);
       return;
     }
     
@@ -40,7 +56,6 @@ const FileUploader = ({ onFileSelected }) => {
     if (file.size > maxFileSize) {
       setError(`File size exceeds the limit of ${maxFileSize / 1024 / 1024}MB`);
       setSelectedFile(null);
-      setPreview(null);
       return;
     }
     
@@ -49,6 +64,11 @@ const FileUploader = ({ onFileSelected }) => {
     // Create preview URL
     const previewUrl = URL.createObjectURL(file);
     setPreview(previewUrl);
+    
+    // Reset audio player if it exists
+    if (audioRef.current) {
+      audioRef.current.load();
+    }
   };
   
   const handleSubmit = (event) => {
@@ -91,10 +111,17 @@ const FileUploader = ({ onFileSelected }) => {
   };
   
   const handleClear = () => {
+    if (preview) {
+      URL.revokeObjectURL(preview);
+    }
     setSelectedFile(null);
     setPreview(null);
     setError(null);
     setUploadProgress(0);
+    // Reset the file input value
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
   
   return (
@@ -110,14 +137,25 @@ const FileUploader = ({ onFileSelected }) => {
         
         <Form onSubmit={handleSubmit}>
           <Form.Group controlId="audioFile" className="mb-3">
-            <Form.Label>Select an audio file</Form.Label>
-            <Form.Control 
-              type="file" 
-              onChange={handleFileChange}
-              accept=".mp3,.wav,.ogg,.flac,.m4a,.webm"
-              disabled={isUploading}
-            />
-            <Form.Text className="text-muted">
+            <div className="d-flex align-items-center custom-file-upload-container">
+              <div className="custom-file-upload">
+                <Form.Label className="btn btn-primary mb-0">
+                  Choose File
+                </Form.Label>
+                <Form.Control 
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileChange}
+                  accept=".mp3,.wav,.ogg,.flac,.m4a,.webm"
+                  disabled={isUploading}
+                  className="custom-file-input"
+                />
+              </div>
+              <span className="file-name ms-2">
+                {selectedFile ? selectedFile.name : 'No file chosen'}
+              </span>
+            </div>
+            <Form.Text className="text-muted mt-2">
               Supported formats: MP3, WAV, OGG, FLAC, M4A, WEBM (max 10MB)
             </Form.Text>
           </Form.Group>
@@ -129,7 +167,7 @@ const FileUploader = ({ onFileSelected }) => {
               </p>
               
               {preview && (
-                <audio controls className="w-100 mb-3">
+                <audio ref={audioRef} controls className="w-100 mb-3" key={preview}>
                   <source src={preview} type={selectedFile.type} />
                   Your browser does not support the audio element.
                 </audio>

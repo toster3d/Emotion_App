@@ -14,7 +14,7 @@ const AudioRecorder = ({ onRecordingComplete }) => {
   const maxRecordingTime = 10; // Maximum recording time in seconds
   const audioContextRef = useRef(null);
   
-  // Funkcja do sprawdzania wspieranych formatów audio
+  // Function to check supported audio formats
   const getSupportedMimeType = useCallback(() => {
     const types = [
       'audio/webm;codecs=opus',
@@ -44,20 +44,20 @@ const AudioRecorder = ({ onRecordingComplete }) => {
     },
     onError: (err) => {
       console.error('Media recorder error:', err);
-      setErrorMessage('Nie można uzyskać dostępu do mikrofonu. Sprawdź uprawnienia przeglądarki.');
+      setErrorMessage('Unable to access the microphone. Check browser permissions.');
     }
   });
   
-  // Konwersja audio jeśli potrzebne dla backendu
+  // Convert audio if needed for backend
   const processAudioForBackend = useCallback(async (audioBlob) => {
     try {
-      // Jeśli backend wymaga WAV, ale przeglądarka nagrała inny format
-      // można tutaj wykonać konwersję
-      // Dla uproszczenia zwracam oryginalny blob
+      // If backend requires WAV, but the browser recorded in a different format
+      // conversion can be done here
+      // For simplicity, returning the original blob
       return audioBlob;
     } catch (error) {
       console.error('Error processing audio format:', error);
-      setErrorMessage('Błąd przetwarzania nagrania audio.');
+      setErrorMessage('Error processing audio recording.');
       return audioBlob;
     }
   }, []);
@@ -76,7 +76,7 @@ const AudioRecorder = ({ onRecordingComplete }) => {
       onRecordingComplete(processedBlob);
     } catch (error) {
       console.error('Error fetching recording blob:', error);
-      setErrorMessage('Błąd podczas pobierania nagrania.');
+      setErrorMessage('Error while fetching the recording.');
     } finally {
       setProcessingAudio(false);
     }
@@ -105,22 +105,22 @@ const AudioRecorder = ({ onRecordingComplete }) => {
     return () => clearInterval(interval);
   }, [status, mediaBlobUrl, stopRecording, recordingTime, fetchRecordingBlob, audioSent]);
   
-  // Obsługa błędów z MediaRecorder
+  // Handle errors from MediaRecorder
   useEffect(() => {
     if (error) {
       console.error('MediaRecorder error:', error);
-      setErrorMessage('Wystąpił błąd podczas nagrywania. Spróbuj ponownie.');
+      setErrorMessage('An error occurred while recording. Please try again.');
     }
   }, [error]);
   
-  // Czyszczenie zasobów przy odmontowaniu komponentu
+  // Cleanup resources on component unmount
   useEffect(() => {
     return () => {
       if (audioElement) {
         audioElement.pause();
       }
       if (audioContextRef.current) {
-        // Skopiuj wartość do lokalnej zmiennej przed użyciem
+        // Copy value to a local variable before use
         const currentAudioContext = audioContextRef.current;
         currentAudioContext.close().catch(console.error);
       }
@@ -148,7 +148,7 @@ const AudioRecorder = ({ onRecordingComplete }) => {
         audioElement.onended = () => setIsPlaying(false);
         audioElement.play().catch(error => {
           console.error('Error playing audio:', error);
-          setErrorMessage('Nie można odtworzyć nagrania.');
+          setErrorMessage('Unable to play the recording.');
         });
       }
       setIsPlaying(!isPlaying);
@@ -210,8 +210,8 @@ const AudioRecorder = ({ onRecordingComplete }) => {
         
         {processingAudio && (
           <Alert variant="info">
-            <Alert.Heading>Trwa przetwarzanie...</Alert.Heading>
-            <p>Proszę czekać, nagranie jest przygotowywane do analizy.</p>
+            <Alert.Heading>Processing...</Alert.Heading>
+            <p>Please wait, the recording is being prepared for analysis.</p>
           </Alert>
         )}
         
@@ -257,8 +257,8 @@ const AudioRecorder = ({ onRecordingComplete }) => {
         {status === 'idle' && !mediaBlobUrl && (
           <div className="text-muted mt-3">
             <small>
-              Nagraj swoją wypowiedź, aby wykryć emocje w głosie. 
-              Najlepsze rezultaty uzyskasz mówiąc wyraźnie, bez hałasu w tle.
+              Record your speech to detect emotions in your voice. 
+              You will achieve the best results by speaking clearly, without background noise.
             </small>
           </div>
         )}

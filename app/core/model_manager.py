@@ -1,21 +1,27 @@
-import os
+from contextlib import asynccontextmanager
 import logging
 import numpy as np
 import torch
+from numpy.typing import NDArray
+from fastapi import FastAPI
 from pathlib import Path
-from typing import Dict, Any, Optional, Union
-
-from app.core import settings
+from typing import AsyncIterator, TypedDict
+from app.core.settings import settings
 from app.models.audio_resnet import AudioResNet
 
 logger = logging.getLogger(__name__)
+
+class PredictionResult(TypedDict):
+    emotion: str
+    confidence: float
+    probabilities: dict[str, float]
 
 class ModelManager:
     """
     Class responsible for loading and managing ML models for emotion recognition
     """
     
-    def __init__(self, model_path: Optional[Union[str, Path]] = None):
+    def __init__(self, model_path: Path | str | None = None) -> None:
         """
         Initialize the model manager with specified model path or default path
 
@@ -24,19 +30,19 @@ class ModelManager:
         """
         self.model_path = Path(model_path) if model_path else Path(settings.PRETRAINED_MODEL_PATH)
         self.device = torch.device("cuda" if torch.cuda.is_available() and settings.USE_CUDA else "cpu")
-        self.model = None
-        self.is_loaded = False
+        self.model: AudioResNet | None = None
+        self.is_loaded: bool = False
         
         logger.info(f"Initializing ModelManager with model path: {self.model_path}, device: {self.device}")
         
         # Load the model
         try:
-            self._load_model()
+            self.load_model()
         except Exception as e:
             logger.error(f"Failed to load model: {str(e)}")
             raise
     
-    def _load_model(self) -> None:
+    def load_model(self) -> None:
         """
         Load the PyTorch model from the specified path
         """
@@ -66,7 +72,7 @@ class ModelManager:
             self.is_loaded = False
             raise
     
-    def predict(self, features: np.ndarray) -> Dict[str, Any]:
+    def predict(self, features: NDArray[np.float32]) -> PredictionResult:
         """
         Make a prediction using the loaded model
 
@@ -92,7 +98,7 @@ class ModelManager:
             # Get model prediction
             with torch.no_grad():
                 outputs = self.model(features_tensor)
-                probabilities = torch.nn.functional.softmax(outputs, dim=1).cpu().numpy()[0]
+                probabilities: NDArray[np.float32] = torch.nn.functional.softmax(outputs, dim=1).to("cpu").numpy()[0] # type: ignore
             
             # Get predicted class index and confidence
             predicted_idx = np.argmax(probabilities)
@@ -102,7 +108,7 @@ class ModelManager:
             predicted_emotion = settings.CLASS_NAMES[predicted_idx]
             
             # Create dictionary of all probabilities
-            all_probabilities = {
+            all_probabilities: dict[str, float] = {
                 emotion: float(prob) 
                 for emotion, prob in zip(settings.CLASS_NAMES, probabilities)
             }
@@ -116,3 +122,17 @@ class ModelManager:
         except Exception as e:
             logger.error(f"Error during prediction: {str(e)}")
             raise
+
+model_manager = ModelManager()
+
+@asynccontextmanager
+async def lifespan_model_loading(app: FastAPI) -> AsyncIterator[None]:
+    """FastAPI lifespan context manager"""
+    try:
+        model_manager.load_model()
+        yield
+    except Exception as e:
+        logger.error(f"Startup error: {str(e)}")
+        raise
+    finally:
+        logger.info("Shutting down model service")

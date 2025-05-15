@@ -1,5 +1,4 @@
 from pydantic import BaseModel, Field
-from typing import Dict, List
 
 class EmotionProbability(BaseModel):
     """Individual emotion probability."""
@@ -11,7 +10,7 @@ class EmotionPrediction(BaseModel):
     """Response model for emotion prediction."""
     emotion: str = Field(..., description="Predicted emotion")
     confidence: float = Field(..., ge=0.0, le=1.0, description="Confidence score for the prediction")
-    probabilities: Dict[str, float] = Field(..., description="Probabilities for all emotions")
+    probabilities: dict[str, float] = Field(..., description="Probabilities for all emotions")
     
     model_config = {
         "json_schema_extra": {
@@ -35,7 +34,7 @@ class HealthCheck(BaseModel):
     """Health check response."""
     status: str = "ok"
     models_loaded: bool
-    available_models: List[str]
+    available_models: list[str]
     device: str
     
     model_config = {

@@ -1,37 +1,74 @@
 version: '3.8'
 
 services:
-  app:
+  backend:
     build:
       context: .
       dockerfile: Dockerfile
+      target: ${ENVIRONMENT:-development}
     ports:
       - "8000:8000"
     volumes:
-      - ./app/models/saved_models:/app/app/models/saved_models
+      - ./model_outputs:/app/model_outputs
+      - ./app:/app/app
     environment:
       - PYTHONPATH=/app
-      - DEBUG=0
+      - DEBUG=${DEBUG:-1}
+      - ENVIRONMENT=${ENVIRONMENT:-development}
     restart: unless-stopped
-    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--reload"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+
+  frontend:
+    build:
+      context: ./app/frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./app/frontend:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - REACT_APP_API_URL=http://localhost:8000/api/v1
+      - WDS_SOCKET_PORT=0
+    depends_on:
+      - backend
+    restart: unless-stopped
+    command: ["npm", "start"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
 
   # Uncomment to add a development frontend service
-  # frontend:
-  #   image: node:18-alpine
-  #   working_dir: /app
-  #   volumes:
-  #     - ./app/frontend:/app
-  #   ports:
-  #     - "3000:3000"
-  #   command: ["npm", "start"]
-  #   environment:
-  #     - NODE_ENV=development
-  #     - CHOKIDAR_USEPOLLING=true
-  #   depends_on:
-  #     - app 
+    frontend:
+      image: node:18-alpine
+      working_dir: /app
+      volumes:
+        - ./app/frontend:/app
+      ports:
+        - "3000:3000"
+      command: ["npm", "start"]
+      environment:
+        - NODE_ENV=development
+        - CHOKIDAR_USEPOLLING=true
+      depends_on:
+        - app 

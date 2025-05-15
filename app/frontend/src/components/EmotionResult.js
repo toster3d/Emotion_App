@@ -46,6 +46,30 @@ const EmotionResult = ({ result, error }) => {
   // Sort by value to have more visually appealing chart
   chartData.sort((a, b) => b.value - a.value);
   
+  // Custom label renderer - only show labels for emotions > 5%
+  const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, index, name, value }) => {
+    if (value < 5) return null; // Hide labels for small segments
+    
+    const RADIAN = Math.PI / 180;
+    const radius = outerRadius * 1.1;
+    const x = cx + radius * Math.cos(-midAngle * RADIAN);
+    const y = cy + radius * Math.sin(-midAngle * RADIAN);
+    
+    return (
+      <text 
+        x={x} 
+        y={y} 
+        fill={EMOTION_COLORS[name] || '#000'} 
+        textAnchor={x > cx ? 'start' : 'end'} 
+        dominantBaseline="central"
+        fontSize="12"
+        fontWeight="bold"
+      >
+        {`${name}: ${value.toFixed(1)}%`}
+      </text>
+    );
+  };
+  
   return (
     <Card>
       <Card.Body>
@@ -65,10 +89,10 @@ const EmotionResult = ({ result, error }) => {
                 cx="50%"
                 cy="50%"
                 labelLine={false}
-                outerRadius={80}
+                outerRadius={100}
                 fill="#8884d8"
                 dataKey="value"
-                label={({ name, value }) => `${name}: ${value.toFixed(1)}%`}
+                label={renderCustomizedLabel}
               >
                 {chartData.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={EMOTION_COLORS[entry.name] || '#000000'} />

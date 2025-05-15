@@ -65,9 +65,9 @@ const RecordPage = () => {
           The audio is recorded in your browser, then sent to our server where:
         </p>
         <ol>
-          <li>The audio is processed to extract various features (melspectrograms, MFCC, chromatograms)</li>
-          <li>Each feature is analyzed by a specialized ResNet18 neural network</li>
-          <li>The results are combined using a weighted ensemble approach for the final prediction</li>
+          <li>The audio is processed to extract the melspectrogram</li>
+          <li>The melspectrogram is analyzed by a specialized ResNet18 neural network</li>
+          <li>The result is used for the final prediction</li>
         </ol>
       </div>
     </div>

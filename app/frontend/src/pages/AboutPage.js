@@ -1,7 +1,7 @@
 import React from 'react';
 import { Card, Row, Col, ListGroup } from 'react-bootstrap';
 import { FaPython, FaReact, FaDocker, FaBrain } from 'react-icons/fa';
-import { SiPytorch, SiFastapi } from 'react-icons/si';
+import { SiPytorch, SiFastapi, SiNumpy, SiPydantic } from 'react-icons/si';
 
 const AboutPage = () => {
   return (
@@ -13,8 +13,7 @@ const AboutPage = () => {
           <Card.Title>Audio Emotion Detection</Card.Title>
           <Card.Text>
             This application analyzes audio recordings to detect emotions using a PyTorch 
-            ensemble model. The model combines predictions from three different ResNet18 
-            networks, each trained on different audio features.
+            ResNet18 model trained on mel spectrograms extracted from audio data.
           </Card.Text>
         </Card.Body>
       </Card>
@@ -27,16 +26,25 @@ const AboutPage = () => {
             <Card.Header>Backend</Card.Header>
             <ListGroup variant="flush">
               <ListGroup.Item>
-                <FaPython className="me-2" /> Python 3.10+
+                <FaPython className="me-2" /> Python 3.13+
               </ListGroup.Item>
               <ListGroup.Item>
-                <SiFastapi className="me-2" /> FastAPI
+                <SiFastapi className="me-2" /> FastAPI 0.115+
               </ListGroup.Item>
               <ListGroup.Item>
-                <SiPytorch className="me-2" /> PyTorch
+                <SiPytorch className="me-2" /> PyTorch 2.7+
               </ListGroup.Item>
               <ListGroup.Item>
-                <FaBrain className="me-2" /> ResNet18 Neural Networks
+                <FaBrain className="me-2" /> TorchVision 0.18+
+              </ListGroup.Item>
+              <ListGroup.Item>
+                <SiNumpy className="me-2" /> NumPy 2.2+
+              </ListGroup.Item>
+              <ListGroup.Item>
+                <SiPydantic className="me-2" /> Pydantic 2.11+
+              </ListGroup.Item>
+              <ListGroup.Item>
+                <FaBrain className="me-2" /> Librosa 0.11.0 (Audio Processing)
               </ListGroup.Item>
             </ListGroup>
           </Card>
@@ -47,13 +55,13 @@ const AboutPage = () => {
             <Card.Header>Frontend</Card.Header>
             <ListGroup variant="flush">
               <ListGroup.Item>
-                <FaReact className="me-2" /> React
+                <FaReact className="me-2" /> React 18.2+
               </ListGroup.Item>
               <ListGroup.Item>
-                <FaReact className="me-2" /> React Bootstrap
+                <FaReact className="me-2" /> React Bootstrap 2.9+
               </ListGroup.Item>
               <ListGroup.Item>
-                <FaReact className="me-2" /> Recharts
+                <FaReact className="me-2" /> Recharts 2.10+
               </ListGroup.Item>
               <ListGroup.Item>
                 <FaDocker className="me-2" /> Docker for deployment
@@ -74,23 +82,20 @@ const AboutPage = () => {
               from the browser.
             </li>
             <li>
-              <strong>Feature Extraction</strong>: Three types of audio features are extracted:
+              <strong>Feature Extraction</strong>: Mel spectrograms are extracted from the audio:
               <ul>
-                <li>Mel Spectrograms - Frequency representation based on human hearing</li>
-                <li>MFCCs (Mel-Frequency Cepstral Coefficients) - Compact representation of audio</li>
-                <li>Chromatograms - Representation based on musical pitch classes</li>
+                <li>Mel Spectrograms - Frequency representation based on human hearing perception</li>
+                <li>Processing includes normalization and conversion to decibel scale</li>
+                <li>The resulting spectrograms capture the audio characteristics needed for emotion detection</li>
               </ul>
             </li>
             <li>
-              <strong>Model Inference</strong>: Each feature is processed by its own specialized 
-              ResNet18 neural network.
+              <strong>Model Inference</strong>: The extracted features are processed by a ResNet18 
+              neural network trained specifically for emotion recognition.
             </li>
             <li>
-              <strong>Ensemble Prediction</strong>: The weighted ensemble model combines predictions 
-              from individual models.
-            </li>
-            <li>
-              <strong>Result</strong>: The final emotion prediction is returned with confidence scores.
+              <strong>Result</strong>: The final emotion prediction is returned with confidence scores 
+              for each emotion.
             </li>
           </ol>
         </Card.Body>
@@ -103,10 +108,10 @@ const AboutPage = () => {
             The model leverages several PyTorch optimizations for efficient inference:
           </p>
           <ul>
-            <li>TorchScript JIT compilation for faster execution</li>
+            <li>Efficient preprocessing of audio data</li>
             <li>Frozen model weights for reduced memory usage</li>
             <li>Inference mode to disable gradient computation</li>
-            <li>Batch processing for multiple features</li>
+            <li>GPU acceleration when available</li>
           </ul>
         </Card.Body>
       </Card>

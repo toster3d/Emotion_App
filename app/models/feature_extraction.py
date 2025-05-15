@@ -1,16 +1,21 @@
 import numpy as np
 import librosa
 import logging
-
+from numpy.typing import NDArray
 from app.core.settings import settings
+from typing import TypedDict
+
 
 logger = logging.getLogger(__name__)
 
+class AudioFeatures(TypedDict):
+    melspectrogram: NDArray[np.float32]
+
 def prepare_audio_features(
-    audio_array: np.ndarray,
+    audio_array: NDArray[np.float32],
     sample_rate: int,
     max_length: float = settings.MAX_AUDIO_LENGTH
-) -> dict[str, np.ndarray]:
+) -> AudioFeatures:
     """
     Extract features from an audio signal
     
@@ -27,7 +32,7 @@ def prepare_audio_features(
         audio_array = preprocess_audio(audio_array, sample_rate, max_length)
         
         # Extract MEL spectrogram
-        mel_spectrogram = extract_melspectrogram(audio_array, sample_rate)
+        mel_spectrogram: NDArray[np.float32] = extract_melspectrogram(audio_array, sample_rate)
         
         # Add batch and channel dimensions for model input
         mel_spectrogram = mel_spectrogram.reshape(1, 1, mel_spectrogram.shape[0], mel_spectrogram.shape[1])
@@ -41,10 +46,10 @@ def prepare_audio_features(
         raise
     
 def preprocess_audio(
-    audio_array: np.ndarray,
+    audio_array: NDArray[np.float32],
     sample_rate: int,
     max_length: float = settings.MAX_AUDIO_LENGTH
-) -> np.ndarray:
+) -> NDArray[np.float32]:
     """
     Preprocess the audio signal for feature extraction
     
@@ -58,13 +63,13 @@ def preprocess_audio(
     """
     # Convert to mono if needed
     if len(audio_array.shape) > 1:
-        audio_array = librosa.to_mono(audio_array)
+        audio_array = librosa.to_mono(audio_array) # type: ignore
     
     # Trim leading and trailing silence
-    audio_array, _ = librosa.effects.trim(audio_array, top_db=20)
+    audio_array, _ = librosa.effects.trim(audio_array, top_db=20) # type: ignore
     
     # Apply amplitude normalization
-    audio_array = librosa.util.normalize(audio_array)
+    audio_array = librosa.util.normalize(audio_array) # type: ignore
     
     # Ensure consistent length
     target_length = int(max_length * sample_rate)
@@ -73,15 +78,15 @@ def preprocess_audio(
         audio_array = audio_array[:target_length]
     else:
         # Pad with zeros
-        padding = np.zeros(target_length - len(audio_array))
+        padding = np.zeros(target_length - len(audio_array), dtype=np.float32)
         audio_array = np.concatenate([audio_array, padding])
     
     return audio_array
 
 def extract_melspectrogram(
-    audio_array: np.ndarray,
+    audio_array: NDArray[np.float32],
     sample_rate: int
-) -> np.ndarray:
+) -> NDArray[np.float32]:
     """
     Extract mel spectrogram from audio signal
     
@@ -93,7 +98,7 @@ def extract_melspectrogram(
         Mel spectrogram as a 2D numpy array
     """
     # Extract mel spectrogram
-    S = librosa.feature.melspectrogram(
+    S = librosa.feature.melspectrogram( # type: ignore
         y=audio_array, 
         sr=sample_rate,
         n_fft=settings.N_FFT,
@@ -102,11 +107,10 @@ def extract_melspectrogram(
     )
     
     # Convert to dB scale
-    S_db = librosa.power_to_db(S, ref=np.max)
+    S_db = librosa.power_to_db(S, ref=np.max) # type: ignore
     
     # Normalize
-    mean = np.mean(S_db)
-    std = np.std(S_db)
+    mean, std = np.mean(S_db), np.std(S_db) # type: ignore
     S_db = (S_db - mean) / std
     
-    return S_db
+    return S_db.astype(np.float32)

@@ -59,7 +59,6 @@ class Settings(BaseSettings):
     HOP_LENGTH: int = 512
     N_FFT: int = 2048
     N_MELS: int = 128
-    DEFAULT_SAMPLE_RATE: int = 22050
 
 
     # GPU Settings
