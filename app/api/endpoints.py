@@ -1,14 +1,10 @@
 import tempfile
-import io
 import logging
-import soundfile as sf
 import librosa
 from pathlib import Path
 from fastapi import APIRouter, UploadFile, File, HTTPException, Query, Form
-from fastapi.responses import JSONResponse
-from typing import Optional
 
-from app.core import settings
+from app.core.settings import settings
 from app.core.model_manager import ModelManager
 from app.api.schemas import EmotionPrediction, HealthCheck, ErrorResponse
 from app.models.feature_extraction import prepare_audio_features
