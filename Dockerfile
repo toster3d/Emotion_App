@@ -24,13 +24,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN python3 -m pip install --no-cache-dir pip --upgrade && \
     python3 -m pip install --no-cache-dir uv
 
-# Copy Python requirements file
+# Copy only requirements file first
 COPY pyproject.toml .
 
 # Install Python dependencies using uv
 RUN uv pip install -e . --system
 
-# Copy the application
+# Copy the application code separately (better layer caching)
 COPY app/ app/
 
 # Run the FastAPI app with Uvicorn in reload mode for development
@@ -60,15 +60,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN python3 -m pip install --no-cache-dir pip --upgrade && \
     python3 -m pip install --no-cache-dir uv
 
-# Copy Python requirements file
+# Copy only requirements file first
 COPY pyproject.toml .
 
 # Install Python dependencies using uv
 RUN uv pip install -e . --system
 
-# Copy the application
+# Copy the application code separately (better layer caching)
 COPY app/ app/
-
 
 # Run the FastAPI app with Uvicorn with multiple workers for production
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"] 

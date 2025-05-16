@@ -1,4 +1,20 @@
-FROM node:18-alpine
+# Build stage
+FROM node:18-alpine AS build
+
+WORKDIR /app
+
+# Install dependencies
+COPY package.json package-lock.json ./
+RUN npm ci
+
+# Copy source code
+COPY . .
+
+# Build the application
+RUN npm run build
+
+# Development stage
+FROM node:18-alpine AS development
 
 WORKDIR /app
 
@@ -6,20 +22,25 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm install
 
-# Copy source code
-COPY . .
-
 # Set environment variables
 ENV NODE_ENV=development
 ENV PORT=3000
 
-# Start the development server
+# The source code will be mounted as a volume
+# Command for running the development server is specified in docker-compose.yml
 CMD ["npm", "start"]
 
-# Production build
-RUN npm run build
+# Production stage
+FROM nginx:alpine AS production
 
-FROM nginx:alpine
-COPY --from=0 /app/build /usr/share/nginx/html
+# Copy built files from build stage
+COPY --from=build /app/build /usr/share/nginx/html
+
+# Add custom nginx config if needed
+# COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# Expose port
 EXPOSE 80
+
+# Start nginx
 CMD ["nginx", "-g", "daemon off;"] 

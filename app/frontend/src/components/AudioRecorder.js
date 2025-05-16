@@ -121,8 +121,10 @@ const AudioRecorder = ({ onRecordingComplete }) => {
       }
       if (audioContextRef.current) {
         // Copy value to a local variable before use
-        const currentAudioContext = audioContextRef.current;
-        currentAudioContext.close().catch(console.error);
+        const currentAudioContext = audioContextRef.current; // Skopiuj wartość ref do zmiennej lokalnej
+        if (currentAudioContext) {
+          currentAudioContext.close().catch(console.error);
+        }
       }
     };
   }, [audioElement]);
