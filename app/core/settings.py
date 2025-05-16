@@ -4,11 +4,11 @@ import os
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
 
-# katalog główny projektu (D:\App_emotion)
+# Project base directory
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 class Settings(BaseSettings):
-    # Konfiguracja ładowania zmiennych środowiskowych
+    # Environment variable loading configuration
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / ".env",
         env_file_encoding="utf-8",
@@ -64,5 +64,5 @@ class Settings(BaseSettings):
     # GPU Settings
     USE_CUDA: bool = Field(default_factory=lambda: os.getenv("USE_CUDA", "True").lower() in ("true", "1", "t"))
 
-# jednoinstancyjna konfiguracja
+# Singleton configuration instance
 settings = Settings()

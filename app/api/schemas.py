@@ -18,12 +18,12 @@ class EmotionPrediction(BaseModel):
                 "emotion": "happy",
                 "confidence": 0.85,
                 "probabilities": {
-                    "angry": 0.02,
-                    "disgust": 0.01,
+                    "anger": 0.02,
+                    "surprised": 0.01,
                     "fear": 0.05,
-                    "happy": 0.85,
+                    "happiness": 0.85,
                     "neutral": 0.05,
-                    "sad": 0.02
+                    "sadness": 0.02
                 }
             }
         }

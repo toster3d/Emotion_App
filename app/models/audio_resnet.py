@@ -8,7 +8,7 @@ class AudioResNet(nn.Module):
     """
     ResNet-based model for audio emotion classification.
 
-    Uses ResNet-18 z jednowymiarowym wejściem (melspektrogram) zamiast RGB.
+    Uses ResNet-18 with a single-channel input (mel spectrogram) instead of RGB.
     """    
     resnet: nn.Module
     dropout: nn.Dropout
@@ -21,10 +21,10 @@ class AudioResNet(nn.Module):
     ) -> None:
         super().__init__() # type: ignore[reportUnknownMemberType]
         
-        # 1) Backbone ResNet-18 bez pretrenowanych wag
+        # 1) ResNet-18 backbone without pretrained weights
         self.resnet = resnet18(weights=None)
         
-        # 2) Zmieniamy pierwszą warstwę conv1 na 1-kanał wejściowy
+        # 2) Change the first convolutional layer (conv1) for 1-channel input
         self.resnet.conv1 = nn.Conv2d(
             in_channels=1,
             out_channels=64,
@@ -34,19 +34,19 @@ class AudioResNet(nn.Module):
             bias=False
         )
         
-        # 3) Wyciągamy liczbę cech z oryginalnej warstwy fc
+        # 3) Get the number of features from the original fc layer
         num_features: int = self.resnet.fc.in_features
         
-        # 4) Usuwamy starą warstwę fc i dodajemy dropout + naszą fc
+        # 4) Remove the old fc layer and add dropout + our new fc layer
         self.resnet.fc = cast(nn.Module, nn.Identity()) # type: ignore[reportAttributeTypeMismatch]
         self.dropout = nn.Dropout(p=dropout_rate)
         self.fc = nn.Linear(in_features=num_features, out_features=num_classes)
         
-        # 5) Inicjalizacja wag
+        # 5) Initialize weights
         self._initialize_weights()
     
     def _initialize_weights(self) -> None:
-        """Zainicjalizuj wagi wybranych warstw."""
+        """Initialize the weights of selected layers."""
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 # m.weight nie może być None przy bias=False
@@ -67,10 +67,10 @@ class AudioResNet(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         """
         Args:
-            x: Tensor o kształcie (N, 1, H, W) – batch, kanał, wysokość, szerokość
+            x: Tensor of shape (N, 1, H, W) – batch size, channel, height, width
 
         Returns:
-            Tensor o kształcie (N, num_classes) – nieliniowe logity
+            Tensor of shape (N, num_classes) – non-linear logits
         """
         x = self.resnet(x)
         x = self.dropout(x)

@@ -78,12 +78,12 @@ async def predict_emotion(
             f"Unsupported audio format: .{ext}. Allowed: {settings.ALLOWED_AUDIO_EXTENSIONS}"
         )
     
-    # Wczytaj plik do pamięci
+    # Load file content into memory
     content = await file.read()
     if len(content) > settings.MAX_UPLOAD_SIZE:
         raise HTTPException(400, f"File too large ({settings.MAX_UPLOAD_SIZE/1e6}MB max)")
 
-    # Zapisz tymczasowo na dysku, by librosa mogło odczytać format
+    # Save temporarily to disk for librosa to read the format
     suffix = f".{ext}"
     tmp_path: str
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
@@ -99,15 +99,15 @@ async def predict_emotion(
             mono=True
         )
 
-        # Wyciągnij cechy
+        # Extract features
         features: AudioFeatures = prepare_audio_features(audio_array, detected_sr)
 
-        # Predykcja
+        # Prediction
         prediction_dict: PredictionResult = model_manager.predict(
             features["melspectrogram"]
         )
 
-        # Konwersja do Pydantic
+        # Convert to Pydantic model
         prediction = EmotionPrediction(**prediction_dict)
         return prediction
 
