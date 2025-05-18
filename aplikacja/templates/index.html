@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Klasyfikator emocji z plików audio</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.10.0/font/bootstrap-icons.min.css" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <!-- Custom CSS -->
+    <link href="/static/css/style.css" rel="stylesheet">
+    <style>
+        /* Dodatkowe style dla przycisku analizy */
+        .btn-analyze {
+            padding: 15px 25px;
+            font-size: 1.25rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            color: #fff;
+            transition: all 0.3s ease;
+            margin-top: 10px;
+            margin-bottom: 10px;
+            background-color: #6607ff;
+            border-color: #6607ff;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        
+        .btn-analyze:hover {
+            transform: scale(1.05);
+            background-color: #7707ff;
+            border-color: #7707ff;
+            box-shadow: 0 6px 12px rgba(0,0,0,0.25);
+        }
+        
+        .btn-analyze i {
+            margin-right: 8px;
+        }
+        
+        /* Pulsujący efekt dla przycisku */
+        @keyframes pulse {
+            0% {
+                box-shadow: 0 0 0 0 rgba(255, 87, 34, 0.7);
+            }
+            70% {
+                box-shadow: 0 0 0 10px rgba(255, 87, 34, 0);
+            }
+            100% {
+                box-shadow: 0 0 0 0 rgba(255, 87, 34, 0);
+            }
+        }
+        
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+        
+        /* Style dla powiększonych czcionek emocji */
+        #mainEmotion {
+            font-size: 1.3rem;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .emotion-label {
+            font-size: 1.25rem;
+            font-weight: 500;
+        }
+        
+        .badge.bg-primary {
+            font-size: 1.1rem;
+            padding: 0.5rem 0.75rem;
+        }
+        
+        .list-group-item {
+            padding: 0.75rem 1.25rem;
+        }
+        
+        /* Powiększenie nagłówka wyników */
+        #results h4 {
+            font-size: 1.6rem;
+            font-weight: bold;
+            margin-bottom: 1rem;
+        }
+        
+        /* Powiększenie tekstu w głównym alercie emocji */
+        .alert-primary strong {
+            font-size: 1.3rem;
+        }
+        
+        /* Powiększenie paska postępu */
+        .progress {
+            height: 30px;
+            margin-top: 12px !important;
+            margin-bottom: 5px;
+            border-radius: 10px;
+            background-color: #e9ecef;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .progress-bar {
+            height: 30px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            line-height: 30px;
+            text-shadow: 1px 1px 1px rgba(0,0,0,0.3);
+            transition: width 0.6s ease;
+            background-color: #007bff;
+            background-image: linear-gradient(45deg, rgba(255,255,255,.15) 25%, 
+                              transparent 25%, transparent 50%, 
+                              rgba(255,255,255,.15) 50%, rgba(255,255,255,.15) 75%, 
+                              transparent 75%, transparent);
+            background-size: 40px 40px;
+            animation: progress-bar-stripes 1s linear infinite;
+        }
+        
+        @keyframes progress-bar-stripes {
+            from { background-position: 40px 0; }
+            to { background-position: 0 0; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container my-5">
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <div class="card shadow">
+                    <div class="card-header bg-primary text-white">
+                        <h1 class="text-center mb-0">Klasyfikator emocji z nagrań audio</h1>
+                    </div>
+                    <div class="card-body">
+                        <ul class="nav nav-tabs mb-3" id="audioSourceTab" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="upload-tab" data-bs-toggle="tab" data-bs-target="#upload-tab-pane" type="button" role="tab" aria-controls="upload-tab-pane" aria-selected="true">Załaduj plik</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="record-tab" data-bs-toggle="tab" data-bs-target="#record-tab-pane" type="button" role="tab" aria-controls="record-tab-pane" aria-selected="false">Nagraj audio</button>
+                            </li>
+                        </ul>
+                        
+                        <div class="tab-content mb-4" id="audioSourceTabContent">
+                            <!-- Ładowanie pliku -->
+                            <div class="tab-pane fade show active" id="upload-tab-pane" role="tabpanel" aria-labelledby="upload-tab" tabindex="0">
+                                <form id="uploadForm">
+                                    <div class="mb-3">
+                                        <label for="audioFile" class="form-label">Wybierz plik audio (.wav, .mp3)</label>
+                                        <input class="form-control" type="file" id="audioFile" accept=".wav,.mp3">
+                                    </div>
+                                    <div class="d-grid">
+                                        <button type="submit" class="btn btn-analyze pulse">
+                                            <i class="bi bi-soundwave"></i> Analizuj nagranie
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                            
+                            <!-- Nagrywanie audio -->
+                            <div class="tab-pane fade" id="record-tab-pane" role="tabpanel" aria-labelledby="record-tab" tabindex="0">
+                                <div class="text-center mb-3">
+                                    <p class="mb-2">Nagraj swoją wypowiedź i poddaj ją analizie emocji</p>
+                                    <div class="record-controls">
+                                        <button id="startRecording" class="btn btn-danger me-2">
+                                            <i class="bi bi-record-circle"></i> Rozpocznij nagrywanie
+                                        </button>
+                                        <button id="stopRecording" class="btn btn-secondary" disabled>
+                                            <i class="bi bi-stop-circle"></i> Zatrzymaj
+                                        </button>
+                                    </div>
+                                </div>
+                                <div id="recordingStatus" class="d-none alert alert-info text-center">
+                                    <div class="d-flex align-items-center justify-content-center">
+                                        <div class="recording-indicator me-2"></div>
+                                        <span>Nagrywanie w toku... <span id="recordingTime">0:00</span></span>
+                                    </div>
+                                </div>
+                                <div id="recordingComplete" class="d-none mt-3">
+                                    <div class="d-grid">
+                                        <button id="analyzeRecording" class="btn btn-analyze pulse">
+                                            <i class="bi bi-soundwave"></i> Analizuj nagranie
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div id="audioPlayer" class="mb-4 d-none">
+                            <h5>Odsłuchaj nagranie:</h5>
+                            <audio id="player" controls class="w-100"></audio>
+                        </div>
+                        
+                        <div id="loading" class="text-center d-none">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Analizowanie...</span>
+                            </div>
+                            <p>Analizowanie nagrania...</p>
+                        </div>
+                        
+                        <div id="results" class="d-none">
+                            <h4 class="mb-3">Wyniki analizy</h4>
+                            
+                            <div class="alert alert-primary" role="alert">
+                                <strong>Dominująca emocja:</strong> <span id="mainEmotion"></span>
+                                <div class="progress">
+                                    <div id="confidenceBar" class="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                                </div>
+                            </div>
+                            
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="chart-container" style="position: relative; height:300px; width:100%">
+                                        <canvas id="emotionChart"></canvas>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <h5 class="mb-3" style="font-size: 1.5rem; font-weight: bold;">Szczegółowe wyniki:</h5>
+                                    <ul id="emotionDetails" class="list-group">
+                                        <!-- będzie wypełnione przez JavaScript -->
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div id="error" class="alert alert-danger d-none" role="alert">
+                            Wystąpił błąd podczas analizy pliku.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap Bundle with Popper -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+    <!-- Custom JS -->
+    <script src="/static/js/script.js"></script>
+</body>
+</html>
