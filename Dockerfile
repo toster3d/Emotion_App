@@ -1,73 +1,42 @@
-# Development stage
-FROM python:3.13-slim AS development
+# Dependency build stage
+FROM python:3.13-slim AS builder
 
-# Set working directory
 WORKDIR /app
 
-# Set environment variables
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PYTHONPATH=/app
-
-# Install system dependencies
+# Installation of system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
-    curl \
     libsndfile1 \
     ffmpeg \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    curl \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Install uv for faster Python package management
-RUN python3 -m pip install --no-cache-dir pip --upgrade && \
-    python3 -m pip install --no-cache-dir uv
+# Installation of package management tools
+RUN pip install --upgrade pip uv
 
-# Copy only requirements file first
-COPY pyproject.toml .
+# Copying dependency files
+COPY pyproject.toml ./
+COPY requirements.txt ./
 
-# Install Python dependencies using uv
-RUN uv pip install -e . --system
-
-# Copy the application code separately (better layer caching)
-COPY app/ app/
-
-# Run the FastAPI app with Uvicorn in reload mode for development
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Installation of dependencies in a separate directory (better cache)
+RUN uv pip install -r requirements.txt --system
 
 # Production stage
-FROM python:3.13-slim AS production
+FROM python:3.13-slim
 
-# Set working directory
 WORKDIR /app
 
-# Set environment variables
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PYTHONPATH=/app
-
-# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libsndfile1 \
     ffmpeg \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Install uv for faster Python package management
-RUN python3 -m pip install --no-cache-dir pip --upgrade && \
-    python3 -m pip install --no-cache-dir uv
+COPY --from=builder /usr/local/lib/python3.13/site-packages /usr/local/lib/python3.13/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
 
-# Copy only requirements file first
-COPY pyproject.toml .
-
-# Install Python dependencies using uv
-RUN uv pip install -e . --system
-
-# Copy the application code separately (better layer caching)
 COPY app/ app/
 
-# Run the FastAPI app with Uvicorn with multiple workers for production
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"] 
+RUN useradd -m appuser
+USER appuser
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

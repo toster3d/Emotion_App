@@ -100,15 +100,32 @@ def start_frontend():
         os.chdir(frontend_dir)
         print("Starting frontend development server...")
 
+        # Ensure that the .env file exists and has the correct content
+        backend_host = "127.0.0.1"  # Default host for backend
+        backend_port = 8000         # Default port for backend
+        
+        print(f"Setting up .env with REACT_APP_API_URL=http://{backend_host}:{backend_port}/api/v1")
+        with open('.env', 'w') as f:
+            f.write(f"REACT_APP_API_URL=http://{backend_host}:{backend_port}/api/v1\n")
+
         # Adjust the command based on the operating system
         if sys.platform.startswith('win'):
-            subprocess.run(["npm.cmd", "start"], shell=True)
+            subprocess.run(["npm.cmd", "start"])
         else:
-            subprocess.run(["npm", "start"], shell=True)
+            subprocess.run(["npm", "start"])
+
     except Exception as e:
         print(f"An error occurred while starting the frontend: {str(e)}")
         sys.exit(1)
     finally:
+        # Remove the .env file after completion
+        env_path = os.path.join(frontend_dir, '.env')
+        if os.path.exists(env_path):
+            try:
+                os.remove(env_path)
+                print("Removed temporary .env file")
+            except:
+                pass
         # Return to the original directory
         os.chdir(original_dir)
 

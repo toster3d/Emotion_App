@@ -138,7 +138,7 @@ async def record_and_predict(
     if len(audio_data) < 1000:
         raise HTTPException(400, "Recorded audio too short.")
 
-    temp_dir = Path("temp_audio")
+    temp_dir = Path(tempfile.gettempdir()) / "temp_audio"
     temp_dir.mkdir(exist_ok=True)
     tmp_file = temp_dir / f"rec_{uuid.uuid4()}.wav"
     tmp_file.write_bytes(audio_data)
