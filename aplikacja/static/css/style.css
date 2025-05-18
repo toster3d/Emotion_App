@@ -1,0 +1,176 @@
+body {
+    background-color: #f8f9fa;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.card {
+    border-radius: 15px;
+    overflow: hidden;
+}
+
+.card-header {
+    background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+    border: none;
+    transition: all 0.3s ease;
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+#audioPlayer {
+    background-color: #f1f3f5;
+    padding: 15px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+}
+
+audio {
+    border-radius: 30px;
+}
+
+.progress {
+    height: 10px;
+    border-radius: 5px;
+}
+
+.emotion-label {
+    font-weight: 500;
+}
+
+.chart-container {
+    padding: 10px;
+    background-color: #fff;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+}
+
+#emotionDetails .list-group-item {
+    border-left: 5px solid transparent;
+    transition: all 0.2s ease;
+}
+
+#emotionDetails .list-group-item:hover {
+    background-color: #f8f9fa;
+    transform: translateX(3px);
+}
+
+/* Kolorystyka dla różnych emocji */
+.emotion-neutral {
+    border-color: #6c757d !important;
+}
+
+.emotion-happy {
+    border-color: #ffc107 !important;
+}
+
+.emotion-sad {
+    border-color: #0d6efd !important;
+}
+
+.emotion-angry {
+    border-color: #dc3545 !important;
+}
+
+.emotion-fearful {
+    border-color: #6f42c1 !important;
+}
+
+.emotion-disgust {
+    border-color: #20c997 !important;
+}
+
+.emotion-surprised {
+    border-color: #fd7e14 !important;
+}
+
+/* Dodatkowe style CSS dla powiększenia czcionek w wykresie */
+.chart-container {
+    height: 400px !important;
+    margin-bottom: 20px;
+    padding: 15px !important;
+}
+
+#results h5 {
+    font-size: 1.6rem !important;
+    font-weight: bold;
+    margin-bottom: 1rem;
+}
+
+#emotionChart {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+@media (min-width: 768px) {
+    .chart-container {
+        min-height: 350px;
+    }
+}
+
+@media (max-width: 767px) {
+    .chart-container {
+        height: 350px !important;
+        margin-bottom: 30px;
+    }
+    
+    #results h5 {
+        font-size: 1.5rem !important;
+        text-align: center;
+    }
+}
+
+
+/* Wskaźnik nagrywania */
+.recording-indicator {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background-color: #dc3545;
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.5;
+        transform: scale(1.2);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+#recordingStatus {
+    background-color: #f8d7da;
+    border-color: #f5c2c7;
+    color: #842029;
+}
+
+#recordingComplete {
+    margin-top: 20px;
+}
+
+/* Zakładki */
+.nav-tabs .nav-link {
+    font-weight: 500;
+    color: #495057;
+    border-bottom-width: 3px;
+}
+
+.nav-tabs .nav-link.active {
+    color: #0d6efd;
+    border-color: #0d6efd;
+}
+
+.tab-content {
+    padding-top: 15px;
+}
